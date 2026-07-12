@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.4.0 — 2026-07-12 (branch feature-v0.4-backgrounds)
+
+Layered background environments — all shared JS, so web and Android both get
+them. Tribunal'd SHIP.
+
+- **7 themed vistas** behind the play boards, built in Donkey-Kong-Country
+  style layers: sky gradient → sun/moon → far & mid silhouettes → a receding
+  perspective ground plane → ground-line details. The boards sit on a themed
+  platform plinth with a cast shadow, so each one reads as planted on the
+  floor with the world stretching back behind it.
+- Themes: **MEADOW** (sun, clouds, rolling hills), **DUSK DUNES** (low sun,
+  palms, sand), **NIGHT** (moon, twinkling stars, shooting stars, mountains),
+  **CAVERN** (glowing crystals, floating spores), **SKY ISLES** (cloud banks,
+  gliding birds), **SEASIDE** (shimmering ocean, sun glitter, distant sails),
+  **EMBER** (volcanic dusk, rising embers).
+- Ambient motion is deliberately subtle — nothing that competes with the
+  panels. Static layers are pre-rendered per theme at boot; the environment
+  is render-only and never affects the deterministic game.
+- Theme is chosen by seed (Endless / Score Attack / Vs / 2P), rotates by
+  level in Puzzle, and each of the 8 Story rivals gets a fitting world
+  (Lord Prism's showdown is EMBER).
+
 ## v0.3.0 — 2026-07-12 (branch feature-v0.3-polish)
 
 Game-feel pass — all shared JS, so web and Android get every change.

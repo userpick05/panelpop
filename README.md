@@ -42,6 +42,15 @@ Build: `powershell tool/build_apk.ps1` → `app/build/app/outputs/flutter-apk/ap
 Touch controls (web + Android): **drag a panel sideways to swap it**, or tap
 a cell then tap it again; hold the on-screen RAISE button to raise the stack.
 
+## Environments
+
+Each round is set in one of seven layered parallax worlds (meadow, dusk dunes,
+night, cavern, sky isles, seaside, ember). The play board sits on a platform in
+the foreground with the vista receding behind it. `js/backgrounds.js` owns this;
+it is render-only (pre-rendered static layers + subtle live ambient motion) and
+never touches the deterministic engine. Theme is picked by seed in the solo/vs
+modes, rotates by level in Puzzle, and is fixed per Story stage.
+
 ## Development
 
 - Engine (`js/engine.js`) is pure logic, loadable in Node via a `module.exports` guard.
