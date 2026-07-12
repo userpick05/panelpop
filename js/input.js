@@ -52,6 +52,18 @@ window.addEventListener('keyup', function (e) {
   keysDown[keyName(e)] = false;
 });
 
+// keys released while unfocused never fire keyup — clear everything so a
+// held raise/direction can't stick after Alt-Tab
+function releaseAll() {
+  keysDown = {};
+  keysEdge = {};
+  das = [{}, {}];
+}
+window.addEventListener('blur', releaseAll);
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) releaseAll();
+});
+
 function anyDown(list) {
   for (var i = 0; i < list.length; i++) if (keysDown[list[i]]) return true;
   return false;

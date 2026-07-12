@@ -66,13 +66,18 @@ var G = {
 };
 
 // draw text; scale = pixel size multiplier
+// raw character first (so 'x' hits the multiply glyph), then uppercase
+function glyph(ch) {
+  return G[ch] || G[ch.toUpperCase()] || G['?'];
+}
+
 function drawText(ctx, text, x, y, color, scale) {
   scale = scale || 1;
   ctx.fillStyle = color;
   var cx = x;
-  text = String(text).toUpperCase();
+  text = String(text);
   for (var i = 0; i < text.length; i++) {
-    var g = G[text[i]] || G['?'];
+    var g = glyph(text[i]);
     var w = g[0].length;
     for (var r = 0; r < 5; r++) {
       for (var c = 0; c < w; c++) {
@@ -89,10 +94,9 @@ function drawText(ctx, text, x, y, color, scale) {
 function textWidth(text, scale) {
   scale = scale || 1;
   var w = 0;
-  text = String(text).toUpperCase();
+  text = String(text);
   for (var i = 0; i < text.length; i++) {
-    var g = G[text[i]] || G['?'];
-    w += (g[0].length + 1) * scale;
+    w += (glyph(text[i])[0].length + 1) * scale;
   }
   return w - scale;
 }

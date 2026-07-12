@@ -26,7 +26,14 @@ function load() {
     var raw = localStorage.getItem(KEY);
     if (raw) {
       var parsed = JSON.parse(raw);
-      for (var k2 in parsed) if (k2 in data) data[k2] = parsed[k2];
+      for (var k2 in parsed) {
+        if (!(k2 in data)) continue;
+        // corrupt/tampered values crash far from load — validate types here
+        var v = parsed[k2], d = defaults[k2];
+        if (typeof v !== typeof d) continue;
+        if (typeof d === 'object' && (v === null || Array.isArray(v))) continue;
+        data[k2] = v;
+      }
     }
   } catch (e) { /* fresh save */ }
   return data;

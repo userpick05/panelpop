@@ -38,7 +38,14 @@ function ensure() {
 function unlock() {
   if (!ensure()) return;
   if (ctx.state === 'suspended') ctx.resume();
+  var first = !unlocked;
   unlocked = true;
+  // a song requested before unlock was only parked in currentSong — start it
+  if (first && musicOn && currentSong && !songTimer) {
+    var pending = currentSong;
+    currentSong = null;
+    playSong(pending);
+  }
 }
 
 function setVolume(v) {

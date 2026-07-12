@@ -93,7 +93,6 @@ function drawBoard(ctx, board, ox, oy, opts) {
         x += Math.round(cell.swapFrom * prog * CELL);
       } else if (cell.state === E.MATCH) {
         if (cell.popped) continue; // gone (sparkle already fired)
-        var sinceMark = cell.mPop - frame;
         if (frame < cell.mPop - 26) {
           img = ((frame >> 1) % 2) ? spr.flash : spr.normal; // white blink
         } else {

@@ -153,7 +153,6 @@ function Board(opts) {
 
   this.attacks = [];            // outgoing {w,h} — mode layer routes these
   this.events = [];             // per-frame events for render/audio
-  this.swapLockout = 0;
 
   this.nColorsOverride = opts.nColorsOverride || 0;
 
@@ -285,13 +284,15 @@ Board.prototype.clearActive = function () {
   return false;
 };
 
-// chain is alive while any chain-flagged panel is airborne or matching
+// chain is alive while any chain-flagged panel is airborne, mid-swap
+// (catch/juggle tech) or matching
 Board.prototype.chainAlive = function () {
   for (var r = 0; r < ROWS; r++) {
     for (var c = 0; c < COLS; c++) {
       var cell = this.grid[r][c];
       if (!cell.chain) continue;
-      if (cell.state === HOVER || cell.state === FALL || cell.state === MATCH) return true;
+      if (cell.state === HOVER || cell.state === FALL ||
+          cell.state === MATCH || cell.state === SWAP) return true;
       if (cell.fell) return true; // landed this frame; match check pending
     }
   }
@@ -370,12 +371,7 @@ Board.prototype.spawnQueuedGarbage = function () {
 Board.prototype.garbageCellsBlocked = function (gb, testY) {
   // is the row below (testY + h) blocked for this block?
   var below = testY + gb.h;
-  if (below > ROWS - 1) {
-    if (below > ROWS - 1 + 1) return true;
-    // resting on the floor row (row 11 bottom) — blocked when bottom would
-    // pass row 11
-    return below > ROWS - 1;
-  }
+  if (below > ROWS - 1) return true; // floor
   for (var c = gb.x; c < gb.x + gb.w; c++) {
     var cell = this.cellAt(below, c);
     if (cell && cell.state !== EMPTY) return true;
@@ -481,7 +477,10 @@ Board.prototype.triggerGarbage = function (matchedCells) {
   }
   for (i = 0; i < this.garbage.length; i++) {
     gb = this.garbage[i];
-    if (toClear[gb.id] && gb.state === 'idle') {
+    // only blocks whose bottom row is on-screen may clear — an off-screen
+    // block would "convert" into nothing (rows above the ceiling produce no
+    // panels) and the attack would silently evaporate
+    if (toClear[gb.id] && gb.state === 'idle' && gb.y + gb.h - 1 >= 0) {
       gb.state = 'clearing';
       gb.t = GARB_FLASH;
       gb.convertCol = 0;
@@ -532,22 +531,26 @@ Board.prototype.stepPanels = function () {
     }
   }
 
-  // gravity — bottom-up so stacks fall as a unit
+  // gravity — bottom-up so whole columns hover/fall as one unit. A cell
+  // below in HOVER/FALL is NOT support (otherwise stacks fall serially,
+  // panel by panel — the "slinky" bug); SWAP still counts as support so a
+  // swap sliding a panel underneath cancels the hover.
+  function supportedBy(below) {
+    return below.state !== EMPTY && below.state !== HOVER && below.state !== FALL;
+  }
   for (c = 0; c < COLS; c++) {
     for (r = ROWS - 1; r >= 0; r--) {
       cell = this.grid[r][c];
       if (cell.gid) continue; // garbage handled separately
       if (cell.state === IDLE || cell.state === LAND) {
         var below = this.cellAt(r + 1, c);
-        var supported = (r === ROWS - 1) || (below && below.state !== EMPTY);
-        if (!supported) {
+        if (!((r === ROWS - 1) || supportedBy(below))) {
           cell.state = HOVER;
           cell.t = this.hoverFrames();
         }
       } else if (cell.state === HOVER) {
         var b2 = this.cellAt(r + 1, c);
-        var sup2 = (r === ROWS - 1) || (b2 && b2.state !== EMPTY);
-        if (sup2) {
+        if ((r === ROWS - 1) || supportedBy(b2)) {
           // support restored (swap slid a panel underneath) — cancel hover
           cell.state = IDLE;
           cell.t = 0;
@@ -700,7 +703,7 @@ Board.prototype.updateChainState = function () {
   if (this.chainAlive() || this.clearActive()) return;
   if (this.chainCounter > 1) {
     if (this.mode === 'vs') {
-      this.attacks.push({ w: COLS, h: this.chainCounter - 1 });
+      this.attacks.push({ w: COLS, h: Math.min(ROWS - 1, this.chainCounter - 1) });
     }
     this.events.push({ t: 'chain_end', chain: this.chainCounter });
     this.chainCounter = 1;
@@ -729,7 +732,9 @@ Board.prototype.stepRise = function () {
     this.riseSub += 4;
   } else {
     if (clearing) return; // clears pause the rise (stop time doesn't tick)
-    if (this.chainCounter > 1) return; // chains freeze the rise
+    // chains freeze the rise — including between links while flagged
+    // panels are still airborne
+    if (this.chainCounter > 1 || this.chainAlive()) return;
     if (this.stopTimer > 0) { this.stopTimer--; return; }
     this.riseSub += this.riseSpeed();
   }

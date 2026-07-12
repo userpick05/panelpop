@@ -64,7 +64,7 @@ window.__pp = {
   // step the sim manually (verification in hidden tabs where rAF is paused)
   tick: function (n) {
     n = n || 1;
-    for (var i = 0; i < n; i++) { screen.update(); Input.endFrame(); frame++; }
+    for (var i = 0; i < n; i++) { handleGlobalKeys(); screen.update(); Input.endFrame(); frame++; }
     screen.draw();
   },
   shot: function () { return canvas.toDataURL('image/png'); }
@@ -516,6 +516,8 @@ function startPuzzle(idx) {
 
 // touch -> cursor moves; returns true when a tap on the cursor asks to swap
 // (merged into the frame's input so the engine handles it normally)
+// TODO(netplay): cursor writes here bypass the input log; route through
+// synthesized directional inputs before building replays/online play
 function touchBoard(board, bo) {
   var swapReq = false;
   var taps = Input.taps;
@@ -552,15 +554,6 @@ var gameScreen = {
   update: function () {
     var g = game;
 
-    // pause handling
-    var gq = Input.drainGlobal();
-    for (var i = 0; i < gq.length; i++) {
-      if (gq[i] === 'pause' && !g.over) togglePause();
-      if (gq[i] === 'volup') { Audio2.volUp(); showToast('VOL ' + Math.round(Audio2.getVolume() * 100) + '%'); }
-      if (gq[i] === 'voldown') { Audio2.volDown(); showToast('VOL ' + Math.round(Audio2.getVolume() * 100) + '%'); }
-      if (gq[i] === 'mute') { Audio2.setMusicOn(!Audio2.isMusicOn()); showToast(Audio2.isMusicOn() ? 'MUSIC ON' : 'MUSIC OFF'); if (Audio2.isMusicOn()) Audio2.playSong(currentSongWanted()); }
-    }
-
     if (g.paused) { this.updatePause(); return; }
 
     // discard stale menu events during play (WASD etc. would otherwise pile
@@ -593,15 +586,14 @@ var gameScreen = {
       if (b.gameOver) { g.over = true; g.overT = 0; }
     } else {
       b.step(null);
-      Fx.update();
       g.overT++;
       if (g.overT === 40) {
-        // records
+        // records — flag at save time so the results banner is exact
         if (g.mode === 'endless') {
-          if (b.score > Save.get('hiEndless')) Save.set('hiEndless', b.score);
+          if (b.score > Save.get('hiEndless')) { Save.set('hiEndless', b.score); g.newRecord = true; }
           if (b.maxChain > Save.get('bestChainEndless')) Save.set('bestChainEndless', b.maxChain);
         } else {
-          if (b.score > Save.get('hiScore')) Save.set('hiScore', b.score);
+          if (b.score > Save.get('hiScore')) { Save.set('hiScore', b.score); g.newRecord = true; }
         }
       }
       if (g.overT > 60) go(resultsScreen);
@@ -631,7 +623,10 @@ var gameScreen = {
 
       if (g.b1.gameOver || g.b2.gameOver) {
         g.over = true; g.overT = 0;
-        g.winner = g.b1.gameOver ? 2 : 1;
+        // check b2 first: an exact-frame double-KO resolves in the player's
+        // favor (biases P1 in 2P; a same-frame tie across two independently
+        // seeded boards is negligible, and a story-mode tie counts as a win)
+        g.winner = g.b2.gameOver ? 1 : 2;
         if (g.winner === 1) Audio2.sfx.win();
         if (g.cpu && g.winner === 1) Save.set('vsWins', Save.get('vsWins') + 1);
         // story progression
@@ -767,8 +762,6 @@ var gameScreen = {
       ctext('PAUSED', W / 2, 70, COL_ACC, 2);
       g.pauseList.draw();
     }
-
-    drawVolumeBar();
   }
 };
 
@@ -796,8 +789,9 @@ function restartGame() {
 }
 
 function currentSongWanted() {
-  if (!game) return 'menu';
-  return 'play';
+  if (screen === gameScreen && game) return game.paused ? null : 'play';
+  if (screen === resultsScreen) return 'results';
+  return 'menu';
 }
 
 // ---- RESULTS -------------------------------------------------------------------
@@ -844,8 +838,7 @@ var resultsScreen = {
       ctext('SCORE ' + g.board.score, W / 2, 84);
       ctext('BEST CHAIN x' + g.board.maxChain, W / 2, 98);
       ctext('PANELS CLEARED ' + g.board.panelsCleared, W / 2, 112);
-      var hi = g.mode === 'score' ? Save.get('hiScore') : Save.get('hiEndless');
-      if (g.board.score >= hi && g.board.score > 0) ctext('NEW RECORD!', W / 2, 132, COL_ACC);
+      if (g.newRecord) ctext('NEW RECORD!', W / 2, 132, COL_ACC);
     } else if (g.kind === 'puzzle') {
       ctext('PUZZLE ' + (g.idx + 1) + ' - ' + Puzzle.LEVELS[g.idx].name, W / 2, 30, COL_DIM);
       ctext(g.won ? 'CLEAR!' : 'OUT OF MOVES', W / 2, 48, g.won ? COL_OK : COL_BAD, 2);
@@ -865,6 +858,30 @@ var resultsScreen = {
 
 // ---- BOOT & LOOP -----------------------------------------------------------------
 
+// volume/music keys work on EVERY screen; 'pause' only routes into a live
+// game. Draining every frame everywhere also prevents Esc presses in menus
+// from piling up and phantom-pausing the next game.
+function handleGlobalKeys() {
+  var gq = Input.drainGlobal();
+  for (var i = 0; i < gq.length; i++) {
+    var ev = gq[i];
+    if (ev === 'pause') {
+      if (screen === gameScreen && game && !game.over) togglePause();
+    } else if (ev === 'volup') {
+      Audio2.volUp(); showToast('VOL ' + Math.round(Audio2.getVolume() * 100) + '%');
+    } else if (ev === 'voldown') {
+      Audio2.volDown(); showToast('VOL ' + Math.round(Audio2.getVolume() * 100) + '%');
+    } else if (ev === 'mute') {
+      Audio2.setMusicOn(!Audio2.isMusicOn());
+      showToast(Audio2.isMusicOn() ? 'MUSIC ON' : 'MUSIC OFF');
+      if (Audio2.isMusicOn()) {
+        var song = currentSongWanted();
+        if (song) Audio2.playSong(song);
+      }
+    }
+  }
+}
+
 function boot() {
   Save.load();
   Audio2.init();
@@ -880,6 +897,7 @@ function boot() {
     last = now;
     var steps = 0;
     while (acc >= 1000 / 60 && steps < 3) {
+      handleGlobalKeys();
       screen.update();
       Input.endFrame();
       frame++;
@@ -889,6 +907,7 @@ function boot() {
     if (acc >= 1000 / 60) acc = 0; // dropped frames: don't spiral
     if ((frame % 60) === 0) resize(); // safety: some hosts report 0-size early
     screen.draw();
+    drawVolumeBar(); // global overlay: volume/music toasts on every screen
   }
   requestAnimationFrame(loop);
 }
