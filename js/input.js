@@ -58,6 +58,7 @@ function releaseAll() {
   keysDown = {};
   keysEdge = {};
   das = [{}, {}];
+  touchPoints = {}; // strand no drags across alt-tab/blur
 }
 window.addEventListener('blur', releaseAll);
 document.addEventListener('visibilitychange', function () {
@@ -119,8 +120,13 @@ function initTouch(canvas, toInternal) {
   canvas.addEventListener('pointerdown', function (e) {
     e.preventDefault();
     Audio2 && Audio2.unlock();
+    if (e.button !== undefined && e.button !== 0) return; // primary only
+    // capture so a mouse released OUTSIDE the canvas still delivers its
+    // pointerup here — otherwise the entry leaks and hover becomes a
+    // permanent phantom drag
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ok */ }
     var pt = scaleFn(e.clientX, e.clientY);
-    touchPoints[e.pointerId] = { x: pt.x, y: pt.y, sx: pt.x, sy: pt.y, moved: false };
+    touchPoints[e.pointerId] = { x: pt.x, y: pt.y, sx: pt.x, sy: pt.y, moved: false, consumed: false };
   }, { passive: false });
   canvas.addEventListener('pointermove', function (e) {
     var p = touchPoints[e.pointerId];
@@ -131,7 +137,7 @@ function initTouch(canvas, toInternal) {
   });
   function up(e) {
     var p = touchPoints[e.pointerId];
-    if (p && !p.moved) taps.push({ x: p.sx, y: p.sy });
+    if (p && !p.moved && !p.consumed) taps.push({ x: p.sx, y: p.sy });
     delete touchPoints[e.pointerId];
   }
   canvas.addEventListener('pointerup', up);
@@ -140,7 +146,9 @@ function initTouch(canvas, toInternal) {
 
 function heldPoints() {
   var out = [];
-  for (var k in touchPoints) out.push(touchPoints[k]);
+  for (var k in touchPoints) {
+    if (!touchPoints[k].consumed) out.push(touchPoints[k]);
+  }
   return out;
 }
 
@@ -149,9 +157,16 @@ function pointers() {
   var out = [];
   for (var k in touchPoints) {
     var p = touchPoints[k];
+    if (p.consumed) continue;
     out.push({ id: k, x: p.x, y: p.y, sx: p.sx, sy: p.sy, moved: p.moved });
   }
   return out;
+}
+
+// mark all current pointers ineligible for drag adoption — called when a new
+// game starts so a finger held through a RESTART can't act on the new board
+function consumePointers() {
+  for (var k in touchPoints) touchPoints[k].consumed = true;
 }
 
 // call at END of each frame
@@ -171,7 +186,8 @@ window.Input = {
   initTouch: initTouch,
   taps: taps,
   heldPoints: heldPoints,
-  pointers: pointers
+  pointers: pointers,
+  consumePointers: consumePointers
 };
 
 })();

@@ -3,7 +3,7 @@
 
 (function () {
 
-var APP_VERSION = '0.1.0';
+var APP_VERSION = '0.2.0';
 
 var W = 480, H = 270;
 var canvas, ctx;
@@ -457,6 +457,7 @@ function startSolo(mode) {
     touch: { dragId: null, dragCx: 0, dragCy: 0 }
   };
   Fx.clear();
+  Input.consumePointers(); // a finger held through RESTART can't act on the new board
   Audio2.playSong('play');
   go(gameScreen);
 }
@@ -476,6 +477,7 @@ function startVsCpu(tier, storyStage) {
   };
   game.ai = new AiPlayer(game.b2, tier, seed + 99);
   Fx.clear();
+  Input.consumePointers(); // a finger held through RESTART can't act on the new board
   Audio2.playSong('play');
   go(gameScreen);
 }
@@ -492,6 +494,7 @@ function startVs2P() {
     touch: { dragId: null, dragCx: 0, dragCy: 0 }
   };
   Fx.clear();
+  Input.consumePointers(); // a finger held through RESTART can't act on the new board
   Audio2.playSong('play');
   go(gameScreen);
 }
@@ -512,6 +515,7 @@ function startPuzzle(idx) {
     touch: { dragId: null, dragCx: 0, dragCy: 0 }
   };
   Fx.clear();
+  Input.consumePointers(); // a finger held through RESTART can't act on the new board
   Audio2.playSong('play');
   go(gameScreen);
 }
@@ -526,12 +530,15 @@ function startPuzzle(idx) {
 function touchBoard(board, bo, tch) {
   var swapReq = false;
   var i, cx, cy;
+  // panels render up to a cell ABOVE their grid row while the stack rises —
+  // map screen points to the row the player is visually touching
+  var riseOff = Math.floor(board.riseSub / Engine.CELL_SUB * 16);
 
   // taps (fire on finger-up with little movement)
   var taps = Input.taps;
   for (i = 0; i < taps.length; i++) {
     var p = taps[i];
-    cx = Math.floor((p.x - bo.x) / 16); cy = Math.floor((p.y - bo.y) / 16);
+    cx = Math.floor((p.x - bo.x) / 16); cy = Math.floor((p.y - bo.y + riseOff) / 16);
     if (cx < 0 || cx > 5 || cy < 0 || cy > 11) continue;
     if (cx > 4) cx = 4;
     if (board.cursor.x === cx && board.cursor.y === cy) {
@@ -546,15 +553,18 @@ function touchBoard(board, bo, tch) {
   var pts = Input.pointers();
   var drag = null;
   if (tch.dragId !== null) {
-    for (i = 0; i < pts.length; i++) if (pts[i].id === tch.dragId) { drag = pts[i]; break; }
-    if (!drag) tch.dragId = null; // finger lifted
+    // require moved: browsers recycle pointer ids (mouse always id 1), and a
+    // fresh same-id press must not resume the old drag's stale column
+    for (i = 0; i < pts.length; i++)
+      if (pts[i].id === tch.dragId && pts[i].moved) { drag = pts[i]; break; }
+    if (!drag) tch.dragId = null; // finger lifted (or id was recycled)
   }
   if (tch.dragId === null) {
     // adopt the first moved pointer whose START was on the board
     for (i = 0; i < pts.length; i++) {
       var q = pts[i];
       if (!q.moved) continue;
-      var scx = Math.floor((q.sx - bo.x) / 16), scy = Math.floor((q.sy - bo.y) / 16);
+      var scx = Math.floor((q.sx - bo.x) / 16), scy = Math.floor((q.sy - bo.y + riseOff) / 16);
       if (scx < 0 || scx > 5 || scy < 0 || scy > 11) continue;
       tch.dragId = q.id;
       tch.dragCx = scx; tch.dragCy = scy;
@@ -563,7 +573,7 @@ function touchBoard(board, bo, tch) {
     }
   }
   if (drag) {
-    cx = Math.floor((drag.x - bo.x) / 16); cy = Math.floor((drag.y - bo.y) / 16);
+    cx = Math.floor((drag.x - bo.x) / 16); cy = Math.floor((drag.y - bo.y + riseOff) / 16);
     if (cx < 0) cx = 0; if (cx > 5) cx = 5;
     if (cy < 0) cy = 0; if (cy > 11) cy = 11;
     tch.dragCy = cy; // the finger row is where we attempt swaps
@@ -708,7 +718,8 @@ var gameScreen = {
       var inp = Input.boardInput(0, true);
       inp.raise = false;
       if (b.movesLeft <= 0) inp.swap = false; // budget spent — no more swaps
-      if (touchBoard(b, g.bo, g.touch) && b.movesLeft > 0) inp.swap = true;
+      // budget spent: don't run touch either (cursor jitter during settle)
+      if (b.movesLeft > 0 && touchBoard(b, g.bo, g.touch)) inp.swap = true;
       b.step(inp);
       processEvents(b, g.bo);
       // count executed swaps (restart lives in the pause menu)
