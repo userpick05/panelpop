@@ -65,7 +65,11 @@ window.__pp = {
   // step the sim manually (verification in hidden tabs where rAF is paused)
   tick: function (n) {
     n = n || 1;
-    for (var i = 0; i < n; i++) { handleGlobalKeys(); screen.update(); Input.endFrame(); frame++; }
+    for (var i = 0; i < n; i++) {
+      handleGlobalKeys(); screen.update();
+      if (fadeT > 0) fadeT--;
+      Input.endFrame(); frame++;
+    }
     screen.draw();
   },
   shot: function () { return canvas.toDataURL('image/png'); }
@@ -666,6 +670,11 @@ var gameScreen = {
   update: function () {
     var g = game;
 
+    // cursor glide advances at sim rate on every path (incl. pause/countdown/
+    // hitstop) so it never stalls mid-glide
+    if (g.kind === 'vs') { Render.tickCursorLerp(g.b1); Render.tickCursorLerp(g.b2); }
+    else Render.tickCursorLerp(g.board);
+
     if (g.paused) { this.updatePause(); return; }
 
     // discard stale menu events during play (WASD etc. would otherwise pile
@@ -676,7 +685,7 @@ var gameScreen = {
     if (g.countdown > 0 && !g.over) {
       if (g.countdown === COUNTDOWN_F || g.countdown === COUNTDOWN_F - 40 ||
           g.countdown === COUNTDOWN_F - 80) Audio2.sfx.count();
-      if (g.countdown === 30) Audio2.sfx.go();
+      if (g.countdown === 31) Audio2.sfx.go(); // GO! draws at 30 — same frame
       g.countdown--;
       Fx.update();
       return;
@@ -711,7 +720,7 @@ var gameScreen = {
         }
       }
       Audio2.playSong(b.inWarning() && !b.gameOver ? 'panic' : 'play');
-      if (b.gameOver) { g.over = true; g.overT = 0; }
+      if (b.gameOver) { g.over = true; g.overT = 0; g.dispScore = b.score; }
     } else {
       b.step(null);
       g.overT++;
@@ -751,7 +760,7 @@ var gameScreen = {
       Audio2.playSong((g.b1.inWarning() || g.b2.inWarning()) ? 'panic' : 'play');
 
       if (g.b1.gameOver || g.b2.gameOver) {
-        g.over = true; g.overT = 0;
+        g.over = true; g.overT = 0; g.dispScore = g.b1.score;
         // check b2 first: an exact-frame double-KO resolves in the player's
         // favor (biases P1 in 2P; a same-frame tie across two independently
         // seeded boards is negligible, and a story-mode tie counts as a win)
@@ -893,8 +902,11 @@ var gameScreen = {
       var n = g.countdown > COUNTDOWN_F - 40 ? '3'
             : g.countdown > COUNTDOWN_F - 80 ? '2'
             : g.countdown > 30 ? '1' : 'GO!';
-      var phase = g.countdown % 40;
-      var cs = phase > 34 ? 5 : 4; // punch-in each number
+      // punch-in anchored to each number's window START
+      var winStart = g.countdown > COUNTDOWN_F - 40 ? COUNTDOWN_F - 1
+                   : g.countdown > COUNTDOWN_F - 80 ? COUNTDOWN_F - 41
+                   : g.countdown > 30 ? COUNTDOWN_F - 81 : 30;
+      var cs = (winStart - g.countdown) < 5 ? 5 : 4;
       var boards = g.kind === 'vs' ? [g.bo1, g.bo2] : [g.bo];
       for (var bi = 0; bi < boards.length; bi++) {
         var bb = boards[bi];
@@ -1059,6 +1071,7 @@ function boot() {
     while (acc >= 1000 / 60 && steps < 3) {
       handleGlobalKeys();
       screen.update();
+      if (fadeT > 0) fadeT--; // sim-rate so the fade lasts the same everywhere
       Input.endFrame();
       frame++;
       acc -= 1000 / 60;
@@ -1068,10 +1081,9 @@ function boot() {
     if ((frame % 60) === 0) resize(); // safety: some hosts report 0-size early
     screen.draw();
     drawVolumeBar(); // global overlay: volume/music toasts on every screen
-    if (fadeT > 0) { // brief fade-in on screen changes
+    if (fadeT > 0) { // brief fade-in on screen changes (decremented in sim)
       ctx.fillStyle = 'rgba(8,8,20,' + (fadeT / 8 * 0.8).toFixed(3) + ')';
       ctx.fillRect(0, 0, W, H);
-      fadeT--;
     }
   }
   requestAnimationFrame(loop);

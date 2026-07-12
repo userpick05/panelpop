@@ -122,18 +122,17 @@ function drawBoard(ctx, board, ox, oy, opts) {
   ctx.fillStyle = 'rgba(8,8,20,0.35)';
   ctx.fillRect(ox, oy + BOARD_H, BOARD_W, CELL);
 
-  // cursor — render position eases toward the grid cell (feel: glides, not
-  // teleports). _rcx/_rcy are render-only fields; never part of the sim hash.
+  // cursor — drawn at a render-only lerped position (see tickCursorLerp,
+  // advanced at SIM rate so the glide feels identical at any refresh rate).
+  // Lerp target is board-local PIXELS incl. rise offset — continuous across
+  // rise commits, so no full-cell bounce when a row locks in.
   if (opts.showCursor !== false && !board.gameOver) {
-    if (board._rcx === undefined) { board._rcx = board.cursor.x; board._rcy = board.cursor.y; }
-    board._rcx += (board.cursor.x - board._rcx) * 0.45;
-    board._rcy += (board.cursor.y - board._rcy) * 0.45;
-    if (Math.abs(board._rcx - board.cursor.x) < 0.02) board._rcx = board.cursor.x;
-    if (Math.abs(board._rcy - board.cursor.y) < 0.02) board._rcy = board.cursor.y;
+    var tpx = board.cursor.x * CELL;
+    var tpy = board.cursor.y * CELL - riseOff;
+    var px = board._rpx === undefined ? tpx : board._rpx;
+    var py = board._rpy === undefined ? tpy : board._rpy;
     var cur = Sprites.cursor[(frame >> 3) % 2];
-    ctx.drawImage(cur,
-      Math.round(ox + board._rcx * CELL) - 3,
-      Math.round(oy + board._rcy * CELL) - 3 - riseOff);
+    ctx.drawImage(cur, Math.round(ox + px) - 3, Math.round(oy + py) - 3);
   }
 
   ctx.restore();
@@ -157,9 +156,24 @@ function drawBoard(ctx, board, ox, oy, opts) {
   return { x: ox, y: oy, w: BOARD_W, h: BOARD_H, riseOff: riseOff };
 }
 
+// advance the cursor glide one 60Hz step (called from the game update, NOT
+// from draw — keeps the feel identical on 60/120/144Hz displays).
+// _rpx/_rpy are render-only fields, never part of the engine hash.
+function tickCursorLerp(board) {
+  if (!E) E = window.Engine;
+  var tpx = board.cursor.x * CELL;
+  var tpy = board.cursor.y * CELL - Math.floor(board.riseSub / E.CELL_SUB * CELL);
+  if (board._rpx === undefined) { board._rpx = tpx; board._rpy = tpy; return; }
+  board._rpx += (tpx - board._rpx) * 0.45;
+  board._rpy += (tpy - board._rpy) * 0.45;
+  if (Math.abs(board._rpx - tpx) < 0.5) board._rpx = tpx;
+  if (Math.abs(board._rpy - tpy) < 0.5) board._rpy = tpy;
+}
+
 window.Render = {
   CELL: CELL, BOARD_W: BOARD_W, BOARD_H: BOARD_H,
-  drawBoard: drawBoard
+  drawBoard: drawBoard,
+  tickCursorLerp: tickCursorLerp
 };
 
 })();
