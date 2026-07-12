@@ -5,7 +5,8 @@
 (function () {
 
 var parts = [];   // {x,y,vx,vy,life,color,size}
-var badges = [];  // {x,y,text,color,life,vy}
+var rings = [];   // {x,y,r,life,color} expanding pop rings
+var badges = [];  // {x,y,text,color,life,vy,scale,punch}
 var shakes = {};  // boardKey -> {mag, t}
 
 function spawnPop(x, y, colorHex) {
@@ -19,14 +20,19 @@ function spawnPop(x, y, colorHex) {
       size: Math.random() < 0.4 ? 2 : 1
     });
   }
+  rings.push({ x: x + 8, y: y + 8, r: 2, life: 12, color: colorHex });
 }
 
 function sparkle(x, y) {
   parts.push({ x: x + 8, y: y + 8, vx: 0, vy: -0.6, life: 18, color: '#ffffff', size: 2 });
 }
 
-function badge(x, y, text, color) {
-  badges.push({ x: x, y: y, text: text, color: color || '#ffffff', life: 55, vy: -0.45 });
+// scale: text size (default 1); big badges get a punch-in (start oversized)
+function badge(x, y, text, color, scale) {
+  badges.push({
+    x: x, y: y, text: text, color: color || '#ffffff',
+    life: 55, vy: -0.45, scale: scale || 1, punch: scale > 1 ? 8 : 0
+  });
 }
 
 function shake(key, mag) {
@@ -48,9 +54,15 @@ function update() {
     p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life--;
     if (p.life <= 0) parts.splice(i, 1);
   }
+  for (i = rings.length - 1; i >= 0; i--) {
+    var rg = rings[i];
+    rg.r += 1.4; rg.life--;
+    if (rg.life <= 0) rings.splice(i, 1);
+  }
   for (i = badges.length - 1; i >= 0; i--) {
     var b = badges[i];
     b.y += b.vy; b.life--;
+    if (b.punch > 0) b.punch--;
     if (b.life <= 0) badges.splice(i, 1);
   }
   for (var k in shakes) if (shakes[k].t > 0) shakes[k].t--;
@@ -58,6 +70,14 @@ function update() {
 
 function draw(ctx) {
   var i;
+  for (i = 0; i < rings.length; i++) {
+    var rg = rings[i];
+    ctx.globalAlpha = Math.min(0.7, rg.life / 12);
+    ctx.strokeStyle = rg.color;
+    ctx.lineWidth = 1;
+    ctx.strokeRect((rg.x - rg.r) | 0, (rg.y - rg.r) | 0, (rg.r * 2) | 0, (rg.r * 2) | 0);
+  }
+  ctx.globalAlpha = 1;
   for (i = 0; i < parts.length; i++) {
     var p = parts[i];
     ctx.globalAlpha = Math.min(1, p.life / 12);
@@ -67,15 +87,15 @@ function draw(ctx) {
   ctx.globalAlpha = 1;
   for (i = 0; i < badges.length; i++) {
     var b = badges[i];
+    var s = b.scale + (b.punch > 4 ? 1 : 0); // brief oversize punch-in
     ctx.globalAlpha = Math.min(1, b.life / 20);
-    // small outline for readability
-    Font.drawTextCentered(ctx, b.text, b.x + 1, (b.y | 0) + 1, '#101020', 1);
-    Font.drawTextCentered(ctx, b.text, b.x, b.y | 0, b.color, 1);
+    Font.drawTextCentered(ctx, b.text, b.x + 1, (b.y | 0) + 1, '#101020', s);
+    Font.drawTextCentered(ctx, b.text, b.x, b.y | 0, b.color, s);
   }
   ctx.globalAlpha = 1;
 }
 
-function clear() { parts.length = 0; badges.length = 0; shakes = {}; }
+function clear() { parts.length = 0; rings.length = 0; badges.length = 0; shakes = {}; }
 
 window.Fx = {
   spawnPop: spawnPop, sparkle: sparkle, badge: badge,

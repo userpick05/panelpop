@@ -112,6 +112,9 @@ var Sfx = {
   raise: function () { blip(200, 0.03, 'triangle', 0.06); },
   select: function () { blip(700, 0.05, 'square', 0.12); },
   back:   function () { blip(300, 0.06, 'square', 0.10); },
+  count:  function () { blip(440, 0.09, 'square', 0.16); },
+  go:     function () { blip(660, 0.06, 'square', 0.18); setTimeout(function () { blip(880, 0.16, 'square', 0.18); }, 60); },
+  tick:   function () { blip(980, 0.04, 'square', 0.10); },
   win: function () {
     [523, 659, 784, 1046].forEach(function (f, i) {
       setTimeout(function () { blip(f, 0.15, 'square', 0.16); }, i * 120);

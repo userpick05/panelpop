@@ -122,15 +122,31 @@ function drawBoard(ctx, board, ox, oy, opts) {
   ctx.fillStyle = 'rgba(8,8,20,0.35)';
   ctx.fillRect(ox, oy + BOARD_H, BOARD_W, CELL);
 
-  // cursor
+  // cursor — render position eases toward the grid cell (feel: glides, not
+  // teleports). _rcx/_rcy are render-only fields; never part of the sim hash.
   if (opts.showCursor !== false && !board.gameOver) {
-    var cur = Sprites.cursor[(frame >> 4) % 2];
+    if (board._rcx === undefined) { board._rcx = board.cursor.x; board._rcy = board.cursor.y; }
+    board._rcx += (board.cursor.x - board._rcx) * 0.45;
+    board._rcy += (board.cursor.y - board._rcy) * 0.45;
+    if (Math.abs(board._rcx - board.cursor.x) < 0.02) board._rcx = board.cursor.x;
+    if (Math.abs(board._rcy - board.cursor.y) < 0.02) board._rcy = board.cursor.y;
+    var cur = Sprites.cursor[(frame >> 3) % 2];
     ctx.drawImage(cur,
-      ox + board.cursor.x * CELL - 3,
-      oy + board.cursor.y * CELL - 3 - riseOff);
+      Math.round(ox + board._rcx * CELL) - 3,
+      Math.round(oy + board._rcy * CELL) - 3 - riseOff);
   }
 
   ctx.restore();
+
+  // danger vignette: pulsing red glow just inside the frame
+  if (warning) {
+    var pulse = 0.10 + 0.10 * Math.abs(Math.sin(frame / 12));
+    ctx.fillStyle = 'rgba(232,79,106,' + pulse.toFixed(3) + ')';
+    ctx.fillRect(ox, oy, BOARD_W, 3);
+    ctx.fillRect(ox, oy + BOARD_H - 3, BOARD_W, 3);
+    ctx.fillRect(ox, oy, 3, BOARD_H);
+    ctx.fillRect(ox + BOARD_W - 3, oy, 3, BOARD_H);
+  }
 
   // game over veil
   if (board.gameOver) {

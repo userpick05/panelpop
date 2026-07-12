@@ -3,7 +3,7 @@
 
 (function () {
 
-var APP_VERSION = '0.2.0';
+var APP_VERSION = '0.3.0';
 
 var W = 480, H = 270;
 var canvas, ctx;
@@ -52,7 +52,8 @@ function showToast(m) { toast.msg = m; toast.t = 90; }
 // ---- screen manager ---------------------------------------------------------
 
 var screen = null;
-function go(s) { screen = s; if (s.enter) s.enter(); }
+var fadeT = 0; // brief fade-in on every screen change
+function go(s) { screen = s; fadeT = 8; if (s.enter) s.enter(); }
 
 // dev/debug handle (harmless in production; used by automated verification)
 window.__pp = {
@@ -111,7 +112,12 @@ MenuList.prototype.draw = function (labels) {
 
 // ---- board event wiring (fx + sfx) -----------------------------------------
 
-function processEvents(board, bo) {
+var CHAIN_COLORS = { 2: '#56b8e8', 3: '#5fc96e', 4: '#f2ca4e', 5: '#f2884e' };
+var SHOUTS = { 4: 'AWESOME!', 5: 'FANTASTIC!', 6: 'INCREDIBLE!', 7: 'UNBELIEVABLE!' };
+
+function chainColor(step) { return CHAIN_COLORS[Math.min(5, step)] || CHAIN_COLORS[5]; }
+
+function processEvents(board, bo, g) {
   var E = Engine;
   var riseOff = Math.floor(board.riseSub / E.CELL_SUB * 16);
   var popIdx = 0;
@@ -127,19 +133,31 @@ function processEvents(board, bo) {
         break;
       case 'match':
         if (ev.chain >= 2) {
-          Fx.badge(ex + 16, ey - 6, 'x' + ev.chain + ' CHAIN!', COL_ACC);
+          Fx.badge(ex + 16, ey - 8, 'x' + ev.chain + ' CHAIN!', chainColor(ev.chain),
+            ev.chain >= 3 ? 2 : 1);
           Audio2.sfx.chain(ev.chain);
-          Fx.shake('b' + bo.x, Math.min(3, ev.chain));
+          Fx.shake('b' + bo.x, Math.min(4, ev.chain));
         }
-        if (ev.n >= 4) Fx.badge(ex + 16, ey + 6, ev.n + ' COMBO!', COL_BLUE);
+        if (ev.n >= 4) Fx.badge(ex + 16, ey + 8, ev.n + ' COMBO!', COL_BLUE, ev.n >= 6 ? 2 : 1);
+        // floating score for anything beyond a plain 3-match
+        var pts = 10 * ev.n + E.comboBonus(ev.n) + E.chainBonus(ev.chain);
+        if (pts > 30) Fx.badge(ex + 16, ey + 20, '+' + pts, '#e8e8f4');
+        // hitstop: the whole game holds its breath on big moments
+        if (g && (ev.chain >= 3 || ev.n >= 5)) {
+          g.hitstop = Math.max(g.hitstop || 0, Math.min(6, 2 + ev.chain));
+        }
         break;
       case 'land': if ((frame & 3) === 0) Audio2.sfx.land(); break;
       case 'garbage_land': Audio2.sfx.garbageLand(); Fx.shake('b' + bo.x, 3); break;
       case 'garbage_pop': Audio2.sfx.garbagePop(); Fx.sparkle(ex, ey); break;
-      case 'level': Fx.badge(bo.x + 48, bo.y + 40, 'SPEED UP!', COL_OK); Audio2.sfx.levelUp(); break;
+      case 'level': Fx.badge(bo.x + 48, bo.y + 40, 'SPEED UP!', COL_OK, 1); Audio2.sfx.levelUp(); break;
       case 'game_over': Audio2.sfx.lose(); Fx.shake('b' + bo.x, 5); break;
       case 'chain_end':
-        if (ev.chain >= 3) Fx.badge(bo.x + 48, bo.y + 24, 'GREAT!', COL_OK);
+        if (ev.chain >= 4) {
+          Fx.badge(bo.x + 48, bo.y + 60, SHOUTS[Math.min(7, ev.chain)], chainColor(ev.chain), 2);
+        } else if (ev.chain === 3) {
+          Fx.badge(bo.x + 48, bo.y + 60, 'GREAT!', COL_OK, 1);
+        }
         break;
     }
   }
@@ -147,9 +165,10 @@ function processEvents(board, bo) {
 
 // ---- HUD --------------------------------------------------------------------
 
-function drawSoloHud(board, x, y, mode, timer) {
+function drawSoloHud(board, x, y, mode, timer, dispScore) {
   text('SCORE', x, y, COL_DIM);
-  text(pad(board.score, 7), x, y + 8, COL_TEXT);
+  text(pad(dispScore === undefined ? board.score : dispScore, 7), x, y + 8,
+    dispScore !== undefined && dispScore < board.score ? COL_ACC : COL_TEXT);
   if (mode === 'score') {
     text('TIME', x, y + 24, COL_DIM);
     text(mmss(timer), x, y + 32, timer < 600 ? COL_BAD : COL_TEXT);
@@ -190,17 +209,35 @@ var titleScreen = {
   },
   draw: function () {
     drawBgPanels();
-    // logo
-    ctext('PANEL', W / 2, 60, '#f27d9d', 4);
-    ctext('POP', W / 2, 96, COL_ACC, 4);
+    // logo: letters bob in a wave, flanked by bobbing panels
+    drawWaveText('PANEL', W / 2, 60, '#f27d9d', 4);
+    drawWaveText('POP', W / 2, 96, COL_ACC, 4);
+    var bobL = Math.round(Math.sin(frame / 14) * 3);
+    var bobR = Math.round(Math.sin(frame / 14 + 1.5) * 3);
+    ctx.drawImage(Sprites.panels[0].normal, W / 2 - 122, 74 + bobL);
+    ctx.drawImage(Sprites.panels[3].normal, W / 2 + 106, 74 + bobR);
     ctx.fillStyle = '#5a5a8c';
     ctx.fillRect(W / 2 - 90, 134, 180, 1);
-    if ((frame >> 5) % 2) ctext('PRESS ENTER', W / 2, 160, COL_TEXT);
+    ctx.globalAlpha = 0.55 + 0.45 * Math.sin(frame / 14);
+    ctext('PRESS ENTER', W / 2, 160, COL_TEXT);
+    ctx.globalAlpha = 1;
     ctext('SWAP - MATCH 3 - CHAIN!', W / 2, 190, COL_DIM);
     ctext('V' + APP_VERSION, W / 2, H - 24, COL_DIM);
     ctext('VOLUME - / +   MUSIC M', W / 2, H - 12, COL_DIM);
   }
 };
+
+// per-letter sine-wave text (title logo)
+function drawWaveText(str, cx, y, color, scale) {
+  var total = Font.textWidth(str, scale);
+  var x = Math.round(cx - total / 2);
+  for (var i = 0; i < str.length; i++) {
+    var ch = str[i];
+    var dy = Math.round(Math.sin(frame / 12 + i * 0.7) * 2);
+    Font.drawText(ctx, ch, x, y + dy, color, scale);
+    x += Font.textWidth(ch, scale) + scale;
+  }
+}
 
 // floating background panels on title/menus
 var bgP = [];
@@ -445,6 +482,8 @@ var game = null; // active session object
 function baseSeed() { return (Date.now() & 0xfffffff) >>> 0; }
 
 // --- solo (endless / score attack)
+var COUNTDOWN_F = 150; // 3..2..1..GO!
+
 function startSolo(mode) {
   var seed = baseSeed();
   game = {
@@ -453,6 +492,7 @@ function startSolo(mode) {
     bo: { x: 56, y: 34 },
     timer: mode === 'score' ? 120 * 60 : 0,
     over: false, overT: 0,
+    countdown: COUNTDOWN_F, hitstop: 0, dispScore: 0,
     paused: false, pauseList: null,
     touch: { dragId: null, dragCx: 0, dragCy: 0 }
   };
@@ -472,6 +512,7 @@ function startVsCpu(tier, storyStage) {
     b2: new Engine.Board({ seed: seed + 1, mode: 'vs', level: 2 + Math.floor(tier / 2) }),
     bo1: { x: 48, y: 40 }, bo2: { x: 336, y: 40 },
     over: false, overT: 0, winner: 0,
+    countdown: COUNTDOWN_F, hitstop: 0, dispScore: 0,
     paused: false, pauseList: null,
     touch: { dragId: null, dragCx: 0, dragCy: 0 }
   };
@@ -490,6 +531,7 @@ function startVs2P() {
     b2: new Engine.Board({ seed: seed + 1, mode: 'vs', level: 3 }),
     bo1: { x: 48, y: 40 }, bo2: { x: 336, y: 40 },
     over: false, overT: 0, winner: 0,
+    countdown: COUNTDOWN_F, hitstop: 0, dispScore: 0,
     paused: false, pauseList: null,
     touch: { dragId: null, dragCx: 0, dragCy: 0 }
   };
@@ -511,6 +553,7 @@ function startPuzzle(idx) {
     bo: { x: 56, y: 34 },
     over: false, overT: 0, won: false,
     settleWait: 0,
+    countdown: 0, hitstop: 0, movePunch: 0, // puzzles start instantly (zen)
     paused: false, pauseList: null,
     touch: { dragId: null, dragCx: 0, dragCy: 0 }
   };
@@ -629,6 +672,19 @@ var gameScreen = {
     // up and replay into the pause menu)
     Input.drainMenu();
 
+    // pre-game countdown: boards visible but frozen
+    if (g.countdown > 0 && !g.over) {
+      if (g.countdown === COUNTDOWN_F || g.countdown === COUNTDOWN_F - 40 ||
+          g.countdown === COUNTDOWN_F - 80) Audio2.sfx.count();
+      if (g.countdown === 30) Audio2.sfx.go();
+      g.countdown--;
+      Fx.update();
+      return;
+    }
+
+    // hitstop: brief full freeze on big chains/combos
+    if (g.hitstop > 0 && !g.over) { g.hitstop--; return; }
+
     if (g.kind === 'solo') this.updateSolo();
     else if (g.kind === 'vs') this.updateVs();
     else if (g.kind === 'puzzle') this.updatePuzzle();
@@ -643,10 +699,13 @@ var gameScreen = {
       if (raiseHeld()) inp.raise = true;
       if (touchBoard(b, g.bo, g.touch)) inp.swap = true;
       b.step(inp);
-      processEvents(b, g.bo);
+      processEvents(b, g.bo, g);
+      g.dispScore += Math.ceil((b.score - g.dispScore) * 0.2);
 
       if (g.mode === 'score') {
         g.timer--;
+        // final 10 seconds tick
+        if (g.timer > 0 && g.timer <= 600 && g.timer % 60 === 0) Audio2.sfx.tick();
         if (g.timer <= 0 && !b.gameOver) {
           b.gameOver = true; g.won = true;
         }
@@ -678,8 +737,9 @@ var gameScreen = {
       var inp2 = g.cpu ? g.ai.update() : Input.boardInput(1, false);
       g.b1.step(inp1);
       g.b2.step(inp2);
-      processEvents(g.b1, g.bo1);
-      processEvents(g.b2, g.bo2);
+      processEvents(g.b1, g.bo1, g);
+      processEvents(g.b2, g.bo2, g);
+      g.dispScore += Math.ceil((g.b1.score - g.dispScore) * 0.2);
 
       // route attacks
       var i;
@@ -721,10 +781,11 @@ var gameScreen = {
       // budget spent: don't run touch either (cursor jitter during settle)
       if (b.movesLeft > 0 && touchBoard(b, g.bo, g.touch)) inp.swap = true;
       b.step(inp);
-      processEvents(b, g.bo);
+      processEvents(b, g.bo, g);
       // count executed swaps (restart lives in the pause menu)
       for (var i = 0; i < b.events.length; i++)
-        if (b.events[i].t === 'swap') b.movesLeft--;
+        if (b.events[i].t === 'swap') { b.movesLeft--; g.movePunch = 10; }
+      if (g.movePunch > 0) g.movePunch--;
 
       if (Puzzle.settled(b, Engine)) {
         g.settleWait++;
@@ -777,7 +838,7 @@ var gameScreen = {
       Render.drawBoard(ctx, b, g.bo.x, g.bo.y, {});
       var hx = g.bo.x + 120;
       if (g.kind === 'solo') {
-        drawSoloHud(b, hx, 40, g.mode, g.timer);
+        drawSoloHud(b, hx, 40, g.mode, g.timer, g.dispScore);
         // raise button (touch)
         ctx.fillStyle = '#22223c';
         ctx.fillRect(raiseBtn.x, raiseBtn.y, raiseBtn.w, raiseBtn.h);
@@ -787,7 +848,8 @@ var gameScreen = {
         text('PUZZLE ' + (g.idx + 1), hx, 40, COL_DIM);
         text(lv.name, hx, 50, COL_TEXT);
         text('MOVES LEFT', hx, 70, COL_DIM);
-        text('' + Math.max(0, g.board.movesLeft), hx, 80, g.board.movesLeft > 0 ? COL_ACC : COL_BAD, 2);
+        text('' + Math.max(0, g.board.movesLeft), hx, 80,
+          g.board.movesLeft > 0 ? COL_ACC : COL_BAD, g.movePunch > 5 ? 3 : 2);
         text('ESC: PAUSE/RETRY', hx, 104, COL_DIM);
         if (g.board.maxChain >= 2) text('CHAIN x' + g.board.maxChain + '!', hx, 122, COL_ACC);
       }
@@ -795,7 +857,7 @@ var gameScreen = {
         var msg = g.kind === 'puzzle'
           ? (g.won ? 'CLEAR!' : 'OUT OF MOVES')
           : (g.won ? 'TIME UP!' : 'GAME OVER');
-        ctext(msg, g.bo.x + 48, g.bo.y + 80, g.won ? COL_ACC : COL_BAD, 2);
+        ctext(msg, g.bo.x + 48, g.bo.y + 80, g.won ? COL_ACC : COL_BAD, stampScale(g.overT));
       }
     } else {
       // vs
@@ -807,7 +869,7 @@ var gameScreen = {
       var rightName = g.cpu ? (g.storyStage !== null ? Story.STAGES[g.storyStage].name : 'CPU LV' + g.tier) : 'P2';
       ctext(rightName, g.bo2.x + 48, g.bo2.y - 14, COL_BAD);
       ctext('SCORE', cxm, 60, COL_DIM);
-      ctext(pad(g.b1.score, 7), cxm, 70);
+      ctext(pad(g.dispScore, 7), cxm, 70);
       ctext('CHAIN x' + g.b1.maxChain, cxm, 86, g.b1.maxChain >= 3 ? COL_ACC : COL_DIM);
       // pending garbage warning
       var q1 = 0, q2 = 0, i;
@@ -819,12 +881,27 @@ var gameScreen = {
       if (g.over) {
         var wbo = g.winner === 1 ? g.bo1 : g.bo2;
         var lbo = g.winner === 1 ? g.bo2 : g.bo1;
-        ctext('WIN!', wbo.x + 48, wbo.y + 80, COL_ACC, 2);
-        ctext('LOSE', lbo.x + 48, lbo.y + 80, COL_BAD, 2);
+        ctext('WIN!', wbo.x + 48, wbo.y + 80, COL_ACC, stampScale(g.overT));
+        ctext('LOSE', lbo.x + 48, lbo.y + 80, COL_BAD, stampScale(g.overT));
       }
     }
 
     Fx.draw(ctx);
+
+    // pre-game countdown overlay
+    if (g.countdown > 0 && !g.over) {
+      var n = g.countdown > COUNTDOWN_F - 40 ? '3'
+            : g.countdown > COUNTDOWN_F - 80 ? '2'
+            : g.countdown > 30 ? '1' : 'GO!';
+      var phase = g.countdown % 40;
+      var cs = phase > 34 ? 5 : 4; // punch-in each number
+      var boards = g.kind === 'vs' ? [g.bo1, g.bo2] : [g.bo];
+      for (var bi = 0; bi < boards.length; bi++) {
+        var bb = boards[bi];
+        ctext(n, bb.x + 48 + 1, bb.y + 78 + 1, '#101020', cs);
+        ctext(n, bb.x + 48, bb.y + 78, n === 'GO!' ? COL_OK : COL_ACC, cs);
+      }
+    }
 
     if (g.paused) {
       ctx.fillStyle = 'rgba(8,8,20,0.8)';
@@ -834,6 +911,9 @@ var gameScreen = {
     }
   }
 };
+
+// big banner text punches in oversized then settles
+function stampScale(t) { return t < 5 ? 4 : (t < 10 ? 3 : 2); }
 
 function togglePause() {
   var g = game;
@@ -868,8 +948,12 @@ function currentSongWanted() {
 
 var resultsScreen = {
   list: null,
+  t: 0,
+  disp: 0,
   enter: function () {
     Audio2.playSong('results');
+    this.t = 0;
+    this.disp = 0;
     var g = game;
     var items = ['RETRY', 'MENU'];
     if (g.kind === 'puzzle' && g.won && g.idx < 29) items.unshift('NEXT PUZZLE');
@@ -879,6 +963,11 @@ var resultsScreen = {
     this.list = new MenuList(items, W / 2 - 40, 170);
   },
   update: function () {
+    this.t++;
+    var g = game;
+    var finalScore = g.kind === 'vs' ? g.b1.score : (g.board ? g.board.score : 0);
+    this.disp += Math.ceil((finalScore - this.disp) * 0.12);
+    if (this.disp > finalScore) this.disp = finalScore;
     var q = Input.drainMenu();
     for (var i = 0; i < q.length; i++) {
       if (q[i] === 'back') { go(menuScreen); return; }
@@ -904,19 +993,20 @@ var resultsScreen = {
     var g = game;
     if (g.kind === 'solo') {
       ctext(g.mode === 'score' ? 'SCORE ATTACK' : 'ENDLESS', W / 2, 30, COL_DIM);
-      ctext(g.won ? 'TIME UP!' : 'GAME OVER', W / 2, 48, g.won ? COL_ACC : COL_BAD, 2);
-      ctext('SCORE ' + g.board.score, W / 2, 84);
+      ctext(g.won ? 'TIME UP!' : 'GAME OVER', W / 2, 48, g.won ? COL_ACC : COL_BAD, stampScale(this.t));
+      ctext('SCORE ' + this.disp, W / 2, 84, this.disp < g.board.score ? COL_ACC : COL_TEXT);
       ctext('BEST CHAIN x' + g.board.maxChain, W / 2, 98);
       ctext('PANELS CLEARED ' + g.board.panelsCleared, W / 2, 112);
-      if (g.newRecord) ctext('NEW RECORD!', W / 2, 132, COL_ACC);
+      if (g.newRecord && this.disp >= g.board.score && (frame >> 4) % 2)
+        ctext('NEW RECORD!', W / 2, 132, COL_ACC);
     } else if (g.kind === 'puzzle') {
       ctext('PUZZLE ' + (g.idx + 1) + ' - ' + Puzzle.LEVELS[g.idx].name, W / 2, 30, COL_DIM);
-      ctext(g.won ? 'CLEAR!' : 'OUT OF MOVES', W / 2, 48, g.won ? COL_OK : COL_BAD, 2);
+      ctext(g.won ? 'CLEAR!' : 'OUT OF MOVES', W / 2, 48, g.won ? COL_OK : COL_BAD, stampScale(this.t));
       if (g.won && g.board.maxChain >= 2) ctext('CHAIN x' + g.board.maxChain + '!', W / 2, 84, COL_ACC);
     } else {
       var st = g.storyStage !== null ? Story.STAGES[g.storyStage] : null;
       ctext(g.winner === 1 ? 'YOU WIN!' : (g.cpu ? 'YOU LOSE' : 'PLAYER ' + g.winner + ' WINS!'),
-        W / 2, 48, g.winner === 1 || !g.cpu ? COL_ACC : COL_BAD, 2);
+        W / 2, 48, g.winner === 1 || !g.cpu ? COL_ACC : COL_BAD, stampScale(this.t));
       if (st) {
         ctext('"' + (g.winner === 1 ? st.win : st.lose) + '"', W / 2, 90, COL_TEXT);
       }
@@ -978,6 +1068,11 @@ function boot() {
     if ((frame % 60) === 0) resize(); // safety: some hosts report 0-size early
     screen.draw();
     drawVolumeBar(); // global overlay: volume/music toasts on every screen
+    if (fadeT > 0) { // brief fade-in on screen changes
+      ctx.fillStyle = 'rgba(8,8,20,' + (fadeT / 8 * 0.8).toFixed(3) + ')';
+      ctx.fillRect(0, 0, W, H);
+      fadeT--;
+    }
   }
   requestAnimationFrame(loop);
 }
