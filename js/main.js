@@ -159,6 +159,8 @@ function processEvents(board, bo, g) {
       case 'chain_end':
         if (ev.chain >= 4) {
           Fx.badge(bo.x + 48, bo.y + 60, SHOUTS[Math.min(7, ev.chain)], chainColor(ev.chain), 2);
+          // solo/puzzle have no enemy — a big chain lights your own side
+          if (g && g.kind !== 'vs') Backgrounds.pulse(bo.x + 48, ev.chain, chainColor(ev.chain));
         } else if (ev.chain === 3) {
           Fx.badge(bo.x + 48, bo.y + 60, 'GREAT!', COL_OK, 1);
         }
@@ -682,8 +684,9 @@ var gameScreen = {
   update: function () {
     var g = game;
 
-    // cursor glide advances at sim rate on every path (incl. pause/countdown/
-    // hitstop) so it never stalls mid-glide
+    // cursor glide + ambient background advance at sim rate on every path
+    // (incl. pause/countdown/hitstop) so they never stall or vary by refresh
+    Backgrounds.tick(g.theme);
     if (g.kind === 'vs') { Render.tickCursorLerp(g.b1); Render.tickCursorLerp(g.b2); }
     else Render.tickCursorLerp(g.board);
 
@@ -762,10 +765,19 @@ var gameScreen = {
       processEvents(g.b2, g.bo2, g);
       g.dispScore += Math.ceil((g.b1.score - g.dispScore) * 0.2);
 
-      // route attacks
-      var i;
-      for (i = 0; i < g.b1.attacks.length; i++) g.b2.queueGarbage(g.b1.attacks[i].w, g.b1.attacks[i].h);
-      for (i = 0; i < g.b2.attacks.length; i++) g.b1.queueGarbage(g.b2.attacks[i].w, g.b2.attacks[i].h);
+      // route attacks — a bold drop lights up the side it lands on (the wash
+      // brightens more for a bigger block)
+      var i, at;
+      for (i = 0; i < g.b1.attacks.length; i++) {
+        at = g.b1.attacks[i];
+        g.b2.queueGarbage(at.w, at.h);
+        Backgrounds.pulse(g.bo2.x + Render.BOARD_W / 2, at.w * at.h);
+      }
+      for (i = 0; i < g.b2.attacks.length; i++) {
+        at = g.b2.attacks[i];
+        g.b1.queueGarbage(at.w, at.h);
+        Backgrounds.pulse(g.bo1.x + Render.BOARD_W / 2, at.w * at.h);
+      }
       g.b1.attacks.length = 0;
       g.b2.attacks.length = 0;
 
@@ -856,7 +868,7 @@ var gameScreen = {
 
     if (g.kind === 'solo' || g.kind === 'puzzle') {
       var b = g.board;
-      Backgrounds.platform(ctx, g.bo.x, g.bo.y, g.theme, Render.BOARD_W, Render.BOARD_H);
+      Backgrounds.halo(ctx, g.bo.x, g.bo.y, Render.BOARD_W, Render.BOARD_H);
       Render.drawBoard(ctx, b, g.bo.x, g.bo.y, {});
       var hx = g.bo.x + 120;
       if (g.kind === 'solo') {
@@ -883,8 +895,8 @@ var gameScreen = {
       }
     } else {
       // vs
-      Backgrounds.platform(ctx, g.bo1.x, g.bo1.y, g.theme, Render.BOARD_W, Render.BOARD_H);
-      Backgrounds.platform(ctx, g.bo2.x, g.bo2.y, g.theme, Render.BOARD_W, Render.BOARD_H);
+      Backgrounds.halo(ctx, g.bo1.x, g.bo1.y, Render.BOARD_W, Render.BOARD_H);
+      Backgrounds.halo(ctx, g.bo2.x, g.bo2.y, Render.BOARD_W, Render.BOARD_H);
       Render.drawBoard(ctx, g.b1, g.bo1.x, g.bo1.y, {});
       Render.drawBoard(ctx, g.b2, g.bo2.x, g.bo2.y, { showCursor: true });
       // center HUD
