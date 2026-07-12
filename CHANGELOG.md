@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.2.0 — 2026-07-12 (branch feature-v0.2-android)
+
+### Android app
+- Flutter WebView shell at `app/` wrapping the **same game files** as the web
+  version — `tool/sync_android.js` copies them into assets at build time, so
+  web and Android can never drift. One-command build: `tool/build_apk.ps1`.
+- Landscape-locked, immersive fullscreen, screen stays awake, Android back
+  button = pause/menu-back.
+- Gradle: Kotlin incremental compilation disabled (cross-drive Windows crash;
+  same fix as Stashpot).
+
+### Touch controls (web + Android)
+- **Drag-to-swap**: drag a panel sideways and it walks under your finger,
+  one legal swap per frame; mid-animation swaps retry instead of stranding
+  the panel. Tap-a-cell / tap-again-to-swap still works (taps now fire on
+  finger-up with a 6px slop so drags and taps never collide).
+
 ## v0.1.0 — 2026-07-12 (branch feature-v0.1-mvp)
 
 Initial version, built overnight. Full Tribunal review (reviewer → converge → judge): **SHIP**.

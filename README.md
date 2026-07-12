@@ -29,6 +29,19 @@ Touch: tap a cell to move the cursor, tap again to swap; on-screen RAISE button.
 
 The board simulation is deterministic and input-driven: given the same RNG seed and the same time-stamped input log, two machines produce bit-identical board states (verified by the determinism test in `tool/test_engine.js`). Netplay can therefore be added later by exchanging input logs (lockstep or rollback) without touching the engine — see `js/engine.js` header notes.
 
+## Android
+
+The Android app is a thin Flutter WebView shell (`app/`) around the **exact
+same game files** — `tool/sync_android.js` copies `index.html` + `js/` into
+the app's assets at build time, so any gameplay change ships to web and
+Android identically. Landscape-locked, fullscreen, screen stays awake, back
+button = pause.
+
+Build: `powershell tool/build_apk.ps1` → `app/build/app/outputs/flutter-apk/app-release.apk`
+
+Touch controls (web + Android): **drag a panel sideways to swap it**, or tap
+a cell then tap it again; hold the on-screen RAISE button to raise the stack.
+
 ## Development
 
 - Engine (`js/engine.js`) is pure logic, loadable in Node via a `module.exports` guard.
