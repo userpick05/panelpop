@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.3.0 — 2026-07-12 (branch feature-v0.3-polish)
+
+Game-feel pass — all shared JS, so web and Android get every change.
+
+### Feel
+- **3-2-1-GO! countdown** before solo and versus rounds (boards visible,
+  frozen), with beeps and punch-in numbers.
+- **Hitstop**: the whole game freezes for a few frames on x3+ chains and
+  5+ combos — big moments land.
+- **Cursor glide**: the cursor eases between cells instead of teleporting
+  (pixel-space lerp, continuous across rise commits, identical feel at any
+  display refresh rate).
+- Chain badges escalate in color and size; x4+ chains shout AWESOME! /
+  FANTASTIC! / INCREDIBLE! / UNBELIEVABLE!; floating +score popups.
+- Pop rings on every cleared panel; pulsing red danger vignette; landing
+  squash and shakes carried over.
+
+### Interface
+- Animated title: logo letters wave, flanking panels bob, PRESS ENTER fades.
+- Screen-change fade transitions; punch-in stamps for GAME OVER / WIN /
+  LOSE / CLEAR and the countdown.
+- Score displays count up (in-game HUD and results); NEW RECORD flashes
+  after the count finishes.
+- Puzzle move counter punches on spend; Score Attack ticks through its
+  final 10 seconds.
+
 ## v0.2.0 — 2026-07-12 (branch feature-v0.2-android)
 
 ### Android app
