@@ -5,49 +5,49 @@
 
 var STAGES = [
   {
-    name: 'POPPY', tier: 1, color: 0,
+    name: 'POPPY', tier: 1, color: 0, bg: 0,
     intro: 'HI! I JUST LEARNED TO SWAP. BE GENTLE, OK?',
     win: 'WOW! YOU MADE THE PANELS DANCE!',
     lose: 'TEEHEE! BEGINNERS LUCK!'
   },
   {
-    name: 'BOBBLE', tier: 2, color: 1,
+    name: 'BOBBLE', tier: 2, color: 1, bg: 5,
     intro: 'BOING! I NEVER STOP BOUNCING OR SWAPPING!',
     win: 'AW, POPPED MY BUBBLE...',
     lose: 'BOING BOING! TOO BOUNCY FOR YA!'
   },
   {
-    name: 'TRIG', tier: 3, color: 2,
+    name: 'TRIG', tier: 3, color: 2, bg: 4,
     intro: 'EVERY ANGLE CALCULATED. YOU CANNOT WIN.',
     win: 'IMPOSSIBLE! MY MATH WAS PERFECT!',
     lose: 'AS CALCULATED. GO STUDY.'
   },
   {
-    name: 'STELLA', tier: 4, color: 3,
+    name: 'STELLA', tier: 4, color: 3, bg: 2,
     intro: 'A STAR IS BORN! TRY TO KEEP UP, DARLING.',
     win: 'MY SPOTLIGHT! YOU STOLE IT!',
     lose: 'SPARKLE SPARKLE! ANOTHER ENCORE!'
   },
   {
-    name: 'FACET', tier: 5, color: 4,
+    name: 'FACET', tier: 5, color: 4, bg: 3,
     intro: 'PRESSURE MAKES DIAMONDS. LET ME SHOW YOU PRESSURE.',
     win: 'HMPH. FLAWLESS TECHNIQUE... ALMOST.',
     lose: 'YOU CRACKED. DIAMONDS DO NOT.'
   },
   {
-    name: 'HEXA', tier: 6, color: 5,
+    name: 'HEXA', tier: 6, color: 5, bg: 1,
     intro: 'SIX SIDES. SIX COLORS. ZERO MERCY.',
     win: 'A SEVENTH SIDE... DEFEAT. FASCINATING.',
     lose: 'GEOMETRY ALWAYS WINS.'
   },
   {
-    name: 'NIMBUS', tier: 7, color: 2,
+    name: 'NIMBUS', tier: 7, color: 2, bg: 2,
     intro: 'I AM THE STORM BEFORE THE THRONE. TURN BACK.',
     win: 'THE SKY... CLEARS FOR YOU.',
     lose: 'SWEPT AWAY LIKE A LEAF!'
   },
   {
-    name: 'LORD PRISM', tier: 8, color: 4,
+    name: 'LORD PRISM', tier: 8, color: 4, bg: 6,
     intro: 'ALL COLORS BEND TO ME. YOUR CHAINS ARE NOTHING.',
     win: 'MY SPECTRUM... SHATTERED! THE PANELS ARE FREE!',
     lose: 'KNEEL BEFORE THE PRISM.'

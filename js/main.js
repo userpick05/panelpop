@@ -3,7 +3,7 @@
 
 (function () {
 
-var APP_VERSION = '0.3.0';
+var APP_VERSION = '0.4.0';
 
 var W = 480, H = 270;
 var canvas, ctx;
@@ -485,6 +485,13 @@ var game = null; // active session object
 
 function baseSeed() { return (Date.now() & 0xfffffff) >>> 0; }
 
+// pick an environment theme from a seed (well-mixed so consecutive games
+// don't repeat)
+function themeFor(seed) {
+  var h = (seed ^ (seed >>> 13)) * 0x9e3779b1;
+  return ((h >>> 8) % Backgrounds.count + Backgrounds.count) % Backgrounds.count;
+}
+
 // --- solo (endless / score attack)
 var COUNTDOWN_F = 150; // 3..2..1..GO!
 
@@ -495,6 +502,7 @@ function startSolo(mode) {
     board: new Engine.Board({ seed: seed, mode: mode === 'score' ? 'score' : 'endless', level: mode === 'score' ? 3 : 1 }),
     bo: { x: 56, y: 34 },
     timer: mode === 'score' ? 120 * 60 : 0,
+    theme: themeFor(seed),
     over: false, overT: 0,
     countdown: COUNTDOWN_F, hitstop: 0, dispScore: 0,
     paused: false, pauseList: null,
@@ -515,6 +523,8 @@ function startVsCpu(tier, storyStage) {
     b1: new Engine.Board({ seed: seed, mode: 'vs', level: 2 + Math.floor(tier / 2) }),
     b2: new Engine.Board({ seed: seed + 1, mode: 'vs', level: 2 + Math.floor(tier / 2) }),
     bo1: { x: 48, y: 40 }, bo2: { x: 336, y: 40 },
+    theme: (storyStage !== undefined && storyStage !== null)
+      ? Story.STAGES[storyStage].bg : themeFor(seed),
     over: false, overT: 0, winner: 0,
     countdown: COUNTDOWN_F, hitstop: 0, dispScore: 0,
     paused: false, pauseList: null,
@@ -534,6 +544,7 @@ function startVs2P() {
     b1: new Engine.Board({ seed: seed, mode: 'vs', level: 3 }),
     b2: new Engine.Board({ seed: seed + 1, mode: 'vs', level: 3 }),
     bo1: { x: 48, y: 40 }, bo2: { x: 336, y: 40 },
+    theme: themeFor(seed),
     over: false, overT: 0, winner: 0,
     countdown: COUNTDOWN_F, hitstop: 0, dispScore: 0,
     paused: false, pauseList: null,
@@ -555,6 +566,7 @@ function startPuzzle(idx) {
     kind: 'puzzle', idx: idx,
     board: Puzzle.loadLevel(Engine.Board, idx),
     bo: { x: 56, y: 34 },
+    theme: idx % Backgrounds.count, // calm rotation through the environments
     over: false, overT: 0, won: false,
     settleWait: 0,
     countdown: 0, hitstop: 0, movePunch: 0, // puzzles start instantly (zen)
@@ -839,11 +851,12 @@ var gameScreen = {
 
   draw: function () {
     var g = game;
-    ctx.fillStyle = '#0e0e22';
-    ctx.fillRect(0, 0, W, H);
+    // layered environment behind everything
+    Backgrounds.draw(ctx, g.theme, frame);
 
     if (g.kind === 'solo' || g.kind === 'puzzle') {
       var b = g.board;
+      Backgrounds.platform(ctx, g.bo.x, g.bo.y, g.theme, Render.BOARD_W, Render.BOARD_H);
       Render.drawBoard(ctx, b, g.bo.x, g.bo.y, {});
       var hx = g.bo.x + 120;
       if (g.kind === 'solo') {
@@ -870,6 +883,8 @@ var gameScreen = {
       }
     } else {
       // vs
+      Backgrounds.platform(ctx, g.bo1.x, g.bo1.y, g.theme, Render.BOARD_W, Render.BOARD_H);
+      Backgrounds.platform(ctx, g.bo2.x, g.bo2.y, g.theme, Render.BOARD_W, Render.BOARD_H);
       Render.drawBoard(ctx, g.b1, g.bo1.x, g.bo1.y, {});
       Render.drawBoard(ctx, g.b2, g.bo2.x, g.bo2.y, { showCursor: true });
       // center HUD
@@ -1058,6 +1073,7 @@ function boot() {
   Save.load();
   Audio2.init();
   SpritesBuild();
+  Backgrounds.build();
   setupCanvas();
   go(titleScreen);
 
