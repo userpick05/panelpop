@@ -292,6 +292,8 @@ var howToScreen = {
       ['RAISE STACK', 'G OR , (HOLD)'],
       ['PAUSE', 'ESC OR P'],
       ['', ''],
+      ['TOUCH: DRAG A PANEL SIDEWAYS TO SWAP,', ''],
+      ['OR TAP A CELL THEN TAP IT AGAIN.', ''],
       ['MATCH 3+ PANELS IN A ROW OR COLUMN.', ''],
       ['PANELS FALLING FROM A CLEAR THAT MATCH', ''],
       ['AGAIN MAKE A CHAIN - X2, X3, X4...', ''],
@@ -452,7 +454,7 @@ function startSolo(mode) {
     timer: mode === 'score' ? 120 * 60 : 0,
     over: false, overT: 0,
     paused: false, pauseList: null,
-    touch: { lastX: -1, lastY: -1 }
+    touch: { dragId: null, dragCx: 0, dragCy: 0 }
   };
   Fx.clear();
   Audio2.playSong('play');
@@ -470,7 +472,7 @@ function startVsCpu(tier, storyStage) {
     bo1: { x: 48, y: 40 }, bo2: { x: 336, y: 40 },
     over: false, overT: 0, winner: 0,
     paused: false, pauseList: null,
-    touch: { lastX: -1, lastY: -1 }
+    touch: { dragId: null, dragCx: 0, dragCy: 0 }
   };
   game.ai = new AiPlayer(game.b2, tier, seed + 99);
   Fx.clear();
@@ -487,7 +489,7 @@ function startVs2P() {
     bo1: { x: 48, y: 40 }, bo2: { x: 336, y: 40 },
     over: false, overT: 0, winner: 0,
     paused: false, pauseList: null,
-    touch: { lastX: -1, lastY: -1 }
+    touch: { dragId: null, dragCx: 0, dragCy: 0 }
   };
   Fx.clear();
   Audio2.playSong('play');
@@ -507,23 +509,29 @@ function startPuzzle(idx) {
     over: false, overT: 0, won: false,
     settleWait: 0,
     paused: false, pauseList: null,
-    touch: { lastX: -1, lastY: -1 }
+    touch: { dragId: null, dragCx: 0, dragCy: 0 }
   };
   Fx.clear();
   Audio2.playSong('play');
   go(gameScreen);
 }
 
-// touch -> cursor moves; returns true when a tap on the cursor asks to swap
-// (merged into the frame's input so the engine handles it normally)
+// touch -> cursor moves; returns true when the engine should swap this frame.
+// Two schemes coexist: tap a cell to move the cursor / tap the cursor to
+// swap, and DRAG a panel horizontally to swap it along under your finger
+// (one swap per frame, so a fast fling walks the panel cell by cell).
+// `tch` is the per-game drag state {dragId, dragCx, dragCy}.
 // TODO(netplay): cursor writes here bypass the input log; route through
 // synthesized directional inputs before building replays/online play
-function touchBoard(board, bo) {
+function touchBoard(board, bo, tch) {
   var swapReq = false;
+  var i, cx, cy;
+
+  // taps (fire on finger-up with little movement)
   var taps = Input.taps;
-  for (var i = 0; i < taps.length; i++) {
+  for (i = 0; i < taps.length; i++) {
     var p = taps[i];
-    var cx = Math.floor((p.x - bo.x) / 16), cy = Math.floor((p.y - bo.y) / 16);
+    cx = Math.floor((p.x - bo.x) / 16); cy = Math.floor((p.y - bo.y) / 16);
     if (cx < 0 || cx > 5 || cy < 0 || cy > 11) continue;
     if (cx > 4) cx = 4;
     if (board.cursor.x === cx && board.cursor.y === cy) {
@@ -533,7 +541,58 @@ function touchBoard(board, bo) {
       Audio2.sfx.move();
     }
   }
+
+  // drag-to-swap
+  var pts = Input.pointers();
+  var drag = null;
+  if (tch.dragId !== null) {
+    for (i = 0; i < pts.length; i++) if (pts[i].id === tch.dragId) { drag = pts[i]; break; }
+    if (!drag) tch.dragId = null; // finger lifted
+  }
+  if (tch.dragId === null) {
+    // adopt the first moved pointer whose START was on the board
+    for (i = 0; i < pts.length; i++) {
+      var q = pts[i];
+      if (!q.moved) continue;
+      var scx = Math.floor((q.sx - bo.x) / 16), scy = Math.floor((q.sy - bo.y) / 16);
+      if (scx < 0 || scx > 5 || scy < 0 || scy > 11) continue;
+      tch.dragId = q.id;
+      tch.dragCx = scx; tch.dragCy = scy;
+      drag = q;
+      break;
+    }
+  }
+  if (drag) {
+    cx = Math.floor((drag.x - bo.x) / 16); cy = Math.floor((drag.y - bo.y) / 16);
+    if (cx < 0) cx = 0; if (cx > 5) cx = 5;
+    if (cy < 0) cy = 0; if (cy > 11) cy = 11;
+    tch.dragCy = cy; // the finger row is where we attempt swaps
+    if (cx > tch.dragCx && tch.dragCx <= 4 && !swapReq) {
+      // dragging right: cursor covers (dragCx, dragCx+1). Only advance the
+      // drag when the swap is actually legal RIGHT NOW (the dragged panel is
+      // un-swappable for 4 frames mid-animation) — otherwise retry next
+      // frame so a fast fling walks the panel cell by cell without stranding
+      if (dragSwapLegal(board, tch.dragCx, tch.dragCy)) {
+        board.cursor.x = tch.dragCx; board.cursor.y = tch.dragCy;
+        swapReq = true;
+        tch.dragCx++;
+      }
+    } else if (cx < tch.dragCx && tch.dragCx >= 1 && !swapReq) {
+      if (dragSwapLegal(board, tch.dragCx - 1, tch.dragCy)) {
+        board.cursor.x = tch.dragCx - 1; board.cursor.y = tch.dragCy;
+        swapReq = true;
+        tch.dragCx--;
+      }
+    }
+  }
+
   return swapReq;
+}
+
+function dragSwapLegal(board, x, y) {
+  var a = board.grid[y][x], b = board.grid[y][x + 1];
+  if (!board.canSwapCell(a) || !board.canSwapCell(b)) return false;
+  return !(a.state === Engine.EMPTY && b.state === Engine.EMPTY);
 }
 
 // RAISE on-screen button zone (solo/puzzle-free modes)
@@ -572,7 +631,7 @@ var gameScreen = {
     if (!g.over) {
       var inp = Input.boardInput(0, true);
       if (raiseHeld()) inp.raise = true;
-      if (touchBoard(b, g.bo)) inp.swap = true;
+      if (touchBoard(b, g.bo, g.touch)) inp.swap = true;
       b.step(inp);
       processEvents(b, g.bo);
 
@@ -604,7 +663,7 @@ var gameScreen = {
     var g = game;
     if (!g.over) {
       var inp1 = Input.boardInput(0, g.cpu); // vs cpu: either mapping works
-      if (touchBoard(g.b1, g.bo1)) inp1.swap = true;
+      if (touchBoard(g.b1, g.bo1, g.touch)) inp1.swap = true;
       if (raiseHeld()) inp1.raise = true;
       var inp2 = g.cpu ? g.ai.update() : Input.boardInput(1, false);
       g.b1.step(inp1);
@@ -649,7 +708,7 @@ var gameScreen = {
       var inp = Input.boardInput(0, true);
       inp.raise = false;
       if (b.movesLeft <= 0) inp.swap = false; // budget spent — no more swaps
-      if (touchBoard(b, g.bo) && b.movesLeft > 0) inp.swap = true;
+      if (touchBoard(b, g.bo, g.touch) && b.movesLeft > 0) inp.swap = true;
       b.step(inp);
       processEvents(b, g.bo);
       // count executed swaps (restart lives in the pause menu)

@@ -105,9 +105,12 @@ function boardInput(p, combined) {
   return inp;
 }
 
-// touch: taps in internal-canvas coords + held points (for RAISE button)
+// touch: taps + drags in internal-canvas coords + held points (RAISE button).
+// A "tap" fires on pointer-UP with little movement; anything that travels
+// further is a drag (drag-to-swap), so the two never collide.
+var TAP_SLOP = 6; // internal px
 var taps = [];
-var touchPoints = {}; // id -> {x,y}
+var touchPoints = {}; // id -> {x,y,sx,sy,moved}
 var canvasRef = null, scaleFn = null;
 
 function initTouch(canvas, toInternal) {
@@ -117,20 +120,37 @@ function initTouch(canvas, toInternal) {
     e.preventDefault();
     Audio2 && Audio2.unlock();
     var pt = scaleFn(e.clientX, e.clientY);
-    touchPoints[e.pointerId] = pt;
-    taps.push(pt);
+    touchPoints[e.pointerId] = { x: pt.x, y: pt.y, sx: pt.x, sy: pt.y, moved: false };
   }, { passive: false });
   canvas.addEventListener('pointermove', function (e) {
-    if (touchPoints[e.pointerId]) touchPoints[e.pointerId] = scaleFn(e.clientX, e.clientY);
+    var p = touchPoints[e.pointerId];
+    if (!p) return;
+    var pt = scaleFn(e.clientX, e.clientY);
+    p.x = pt.x; p.y = pt.y;
+    if (Math.abs(p.x - p.sx) > TAP_SLOP || Math.abs(p.y - p.sy) > TAP_SLOP) p.moved = true;
   });
-  function up(e) { delete touchPoints[e.pointerId]; }
+  function up(e) {
+    var p = touchPoints[e.pointerId];
+    if (p && !p.moved) taps.push({ x: p.sx, y: p.sy });
+    delete touchPoints[e.pointerId];
+  }
   canvas.addEventListener('pointerup', up);
-  canvas.addEventListener('pointercancel', up);
+  canvas.addEventListener('pointercancel', function (e) { delete touchPoints[e.pointerId]; });
 }
 
 function heldPoints() {
   var out = [];
   for (var k in touchPoints) out.push(touchPoints[k]);
+  return out;
+}
+
+// active pointers with ids (for drag tracking)
+function pointers() {
+  var out = [];
+  for (var k in touchPoints) {
+    var p = touchPoints[k];
+    out.push({ id: k, x: p.x, y: p.y, sx: p.sx, sy: p.sy, moved: p.moved });
+  }
   return out;
 }
 
@@ -150,7 +170,8 @@ window.Input = {
   endFrame: endFrame,
   initTouch: initTouch,
   taps: taps,
-  heldPoints: heldPoints
+  heldPoints: heldPoints,
+  pointers: pointers
 };
 
 })();
