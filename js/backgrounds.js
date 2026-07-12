@@ -465,26 +465,33 @@ function draw(ctx, idx, frame) {
 function platform(ctx, ox, oy, idx, w, h) {
   idx = ((idx % THEMES.length) + THEMES.length) % THEMES.length;
   var th = THEMES[idx];
-  var by = oy + h;                 // board bottom
+  // the board's own 3px frame border ends at oy+h+3; sit the slab just below
+  // that so its lit top face actually peeks out and reads as a floor the
+  // tower stands on (not buried under the border).
+  var by = oy + h + 3;             // slab top, clear of the board border
   var cx = ox + w / 2;
-  // soft cast shadow on the floor
-  ctx.globalAlpha = 0.28;
+  // soft cast shadow on the floor, a touch beyond the slab
+  ctx.globalAlpha = 0.30;
   ctx.fillStyle = '#000000';
   ctx.beginPath();
-  ctx.ellipse(cx, by + 9, w / 2 + 10, 6, 0, 0, 6.29);
+  ctx.ellipse(cx, by + 11, w / 2 + 13, 6, 0, 0, 6.29);
   ctx.fill();
   ctx.globalAlpha = 1;
-  // slab: top face (lit) + front face (shade), themed
+  // slab: lit top face + shaded front face + dark base line, themed. Wider
+  // than the tower so it reads as a plinth it stands on.
   var top = th.ground[1], front = th.ground[2], edge = th.ground[0];
   ctx.fillStyle = front;
-  ctx.fillRect(ox - 7, by + 1, w + 14, 7);
+  ctx.fillRect(ox - 9, by + 3, w + 18, 8);
   ctx.fillStyle = top;
-  ctx.fillRect(ox - 7, by, w + 14, 3);
+  ctx.fillRect(ox - 9, by, w + 18, 4);
   ctx.fillStyle = edge;
-  ctx.fillRect(ox - 7, by + 7, w + 14, 1);
-  // little bevel highlight
-  ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  ctx.fillRect(ox - 7, by, w + 14, 1);
+  ctx.fillRect(ox - 9, by + 10, w + 18, 1);
+  // top bevel highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.fillRect(ox - 9, by, w + 18, 1);
+  // front-face shadow gradient for a little roundness
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  ctx.fillRect(ox - 9, by + 8, w + 18, 3);
 }
 
 function themeName(idx) {
