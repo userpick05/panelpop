@@ -3,7 +3,7 @@
 
 (function () {
 
-var APP_VERSION = '0.4.0';
+var APP_VERSION = '0.5.0';
 
 var W = 480, H = 270;
 var canvas, ctx;

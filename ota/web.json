@@ -1,0 +1,20 @@
+{
+  "webVersion": "0.5.0",
+  "files": [
+    "index.html",
+    "js/ai.js",
+    "js/audio.js",
+    "js/backgrounds.js",
+    "js/engine.js",
+    "js/font.js",
+    "js/fx.js",
+    "js/input.js",
+    "js/main.js",
+    "js/puzzle.js",
+    "js/render.js",
+    "js/rng.js",
+    "js/save.js",
+    "js/sprites.js",
+    "js/story.js"
+  ]
+}
