@@ -3,7 +3,7 @@
 
 (function () {
 
-var APP_VERSION = '0.5.0';
+var APP_VERSION = '0.5.1';
 
 var W = 480, H = 270;
 var canvas, ctx;
@@ -28,9 +28,12 @@ function resize() {
   var ww = window.innerWidth, wh = window.innerHeight;
   var s = Math.min(ww / W, wh / H);
   if (!isFinite(s) || s <= 0.1) s = 1; // window not measurable yet
-  if (s > 1.5) s = Math.floor(s); // integer scale when big enough
-  canvas.style.width = (W * s) + 'px';
-  canvas.style.height = (H * s) + 'px';
+  // Always scale to the largest aspect-preserving fit so the game fills the
+  // screen. (image-rendering:pixelated keeps it crisp at fractional scale;
+  // an earlier integer-snap floored phones whose fit was ~1.5-1.9 down to 1x,
+  // rendering the board tiny in the middle of the display.)
+  canvas.style.width = Math.round(W * s) + 'px';
+  canvas.style.height = Math.round(H * s) + 'px';
 }
 
 // ---- tiny helpers -----------------------------------------------------------

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.1 — 2026-07-12 (branch feature-v0.5-ota)
+
+- **Fix: game rendered tiny on many phones.** The canvas fit-scale was snapped
+  to a whole number above 1.5×, so a phone whose natural fit was ~1.5–1.9×
+  floored to 1× and drew the board at 480×270 in the middle of the screen. Now
+  it always scales to the largest aspect-preserving fit, so it fills the
+  display. (Also the first fix delivered over the air — installed 0.5.0 apps
+  pull it silently.)
+
 ## v0.5.0 — 2026-07-12 (branch feature-v0.5-ota)
 
 Now on GitHub (public: `userpick05/panelpop`) and set up for over-the-air
