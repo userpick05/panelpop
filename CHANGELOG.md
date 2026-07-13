@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.5.0 — 2026-07-12 (branch feature-v0.5-ota)
+
+Now on GitHub (public: `userpick05/panelpop`) and set up for over-the-air
+updates.
+
+- **Web OTA (silent):** the game is web content, so the Android app updates it
+  without a reinstall. The shell serves the game from a writable copy through a
+  fixed-port loopback server — one stable origin, so **saves survive updates**
+  and it works fully offline. On launch it checks `ota/web.json`; a newer web
+  bundle is downloaded to a staging dir, promoted atomically, and applied on the
+  next launch. Push new game files → every install picks them up.
+- **APK OTA (native shell):** for the rare time the Flutter wrapper itself
+  changes, the app checks `ota/apk.json` and offers a one-tap download + install
+  (same pattern as the other userpick05 apps).
+- **GitHub Pages:** the repo also serves the game as a playable web build at
+  `https://userpick05.github.io/panelpop/`, which doubles as the OTA source.
+- `tool/gen_manifests.js` regenerates both manifests from `APP_VERSION` /
+  pubspec so versions can't drift.
+
 ## v0.4.0 — 2026-07-12 (branch feature-v0.4-backgrounds)
 
 Abstract ambient backgrounds — all shared JS, so web and Android both get
