@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6.0 — 2026-07-12 (branch feature-v0.5-ota)
+
+- **Virtual on-screen controls for phones.** A translucent thumb **D-pad**
+  (move the cursor), **SWAP** and **RAISE** buttons, and a pause button. No
+  more hunting for a tiny cell with a fat finger — move the cursor and press
+  SWAP. Auto-shown on touch-primary devices (the Android app and mobile web
+  browsers); hidden on desktop. Tap/drag-to-swap still works too. Delivered to
+  installed apps over the air — no reinstall needed. (`js/touchpad.js`, wired
+  into the same input pipeline as the keyboard.)
+
 ## v0.5.1 — 2026-07-12 (branch feature-v0.5-ota)
 
 - **Fix: game rendered tiny on many phones.** The canvas fit-scale was snapped

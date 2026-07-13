@@ -3,7 +3,7 @@
 
 (function () {
 
-var APP_VERSION = '0.5.1';
+var APP_VERSION = '0.6.0';
 
 var W = 480, H = 270;
 var canvas, ctx;
@@ -338,8 +338,8 @@ var howToScreen = {
       ['RAISE STACK', 'G OR , (HOLD)'],
       ['PAUSE', 'ESC OR P'],
       ['', ''],
-      ['TOUCH: DRAG A PANEL SIDEWAYS TO SWAP,', ''],
-      ['OR TAP A CELL THEN TAP IT AGAIN.', ''],
+      ['PHONE: USE THE ON-SCREEN D-PAD +', ''],
+      ['SWAP / RAISE BUTTONS, OR TAP/DRAG PANELS.', ''],
       ['MATCH 3+ PANELS IN A ROW OR COLUMN.', ''],
       ['PANELS FALLING FROM A CLEAR THAT MATCH', ''],
       ['AGAIN MAKE A CHAIN - X2, X3, X4...', ''],
@@ -1116,6 +1116,9 @@ function boot() {
       ctx.fillStyle = 'rgba(8,8,20,' + (fadeT / 8 * 0.8).toFixed(3) + ')';
       ctx.fillRect(0, 0, W, H);
     }
+    // virtual pad (phones): visible only during active play
+    Touchpad.setActive(screen === gameScreen && !!game && !game.paused &&
+      !game.over && (game.countdown | 0) <= 0);
   }
   requestAnimationFrame(loop);
 }

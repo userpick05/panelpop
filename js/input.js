@@ -89,6 +89,34 @@ function dasDir(p, dir, map) {
   return false;
 }
 
+// ---- virtual on-screen pad (phones) ----------------------------------------
+// The touchpad overlay (js/touchpad.js) feeds this state; it merges into
+// player-0 board input exactly like the keyboard, so the engine sees no
+// difference. Directions get the same DAS auto-repeat as keys.
+var padHeld = { left: false, right: false, up: false, down: false };
+var padDas = { left: 0, right: 0, up: 0, down: 0 };
+var padRaise = false;
+var padSwapEdge = false;
+
+// ctrl: 'left'|'right'|'up'|'down' (held) | 'raise' (held) | 'swap' (edge)
+function padSet(ctrl, pressed) {
+  if (ctrl === 'swap') { if (pressed) padSwapEdge = true; }
+  else if (ctrl === 'raise') { padRaise = pressed; }
+  else if (ctrl in padHeld) { padHeld[ctrl] = pressed; if (!pressed) padDas[ctrl] = 0; }
+}
+function padClear() {
+  padHeld.left = padHeld.right = padHeld.up = padHeld.down = false;
+  padDas.left = padDas.right = padDas.up = padDas.down = 0;
+  padRaise = false; padSwapEdge = false;
+}
+function padDir(dir) {
+  if (!padHeld[dir]) { padDas[dir] = 0; return false; }
+  var c = padDas[dir]++;
+  if (c === 0) return true;
+  if (c >= DAS_DELAY && (c - DAS_DELAY) % DAS_RATE === 0) return true;
+  return false;
+}
+
 // per-frame board input for player p. combined=true merges both mappings
 // (solo modes: either hand works)
 function boardInput(p, combined) {
@@ -102,6 +130,15 @@ function boardInput(p, combined) {
     if (dasDir(maps[i], 'down', m)) inp.down = true;
     if (anyEdge(m.swap)) inp.swap = true;
     if (anyDown(m.raise)) inp.raise = true;
+  }
+  // the virtual pad drives player 0 (the phone player)
+  if (p === 0) {
+    if (padDir('left')) inp.left = true;
+    if (padDir('right')) inp.right = true;
+    if (padDir('up')) inp.up = true;
+    if (padDir('down')) inp.down = true;
+    if (padSwapEdge) inp.swap = true;
+    if (padRaise) inp.raise = true;
   }
   return inp;
 }
@@ -173,6 +210,7 @@ function consumePointers() {
 function endFrame() {
   keysEdge = {};
   taps.length = 0;
+  padSwapEdge = false; // consumed once per frame
 }
 
 function drainMenu() { var q = menuQueue.slice(); menuQueue.length = 0; return q; }
@@ -187,7 +225,9 @@ window.Input = {
   taps: taps,
   heldPoints: heldPoints,
   pointers: pointers,
-  consumePointers: consumePointers
+  consumePointers: consumePointers,
+  padSet: padSet,
+  padClear: padClear
 };
 
 })();

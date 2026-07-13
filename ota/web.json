@@ -1,5 +1,5 @@
 {
-  "webVersion": "0.5.1",
+  "webVersion": "0.6.0",
   "files": [
     "index.html",
     "js/ai.js",
@@ -15,6 +15,7 @@
     "js/rng.js",
     "js/save.js",
     "js/sprites.js",
-    "js/story.js"
+    "js/story.js",
+    "js/touchpad.js"
   ]
 }
