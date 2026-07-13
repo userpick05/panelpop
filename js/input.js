@@ -59,6 +59,7 @@ function releaseAll() {
   keysEdge = {};
   das = [{}, {}];
   touchPoints = {}; // strand no drags across alt-tab/blur
+  padClear();       // a held RAISE/direction must not stick after backgrounding
 }
 window.addEventListener('blur', releaseAll);
 document.addEventListener('visibilitychange', function () {

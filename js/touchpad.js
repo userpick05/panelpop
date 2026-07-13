@@ -86,8 +86,25 @@ function build() {
   wireButton(bEl, 'raise', true);
   wirePause();
 
-  // re-evaluate auto visibility if the device orientation/inputs change
-  window.addEventListener('resize', function () { if (visible) applyVisible(true); });
+  // re-evaluate auto visibility if the device orientation/inputs change; drop
+  // the cached D-pad rect so a rotation mid-hold recomputes the center
+  window.addEventListener('resize', function () {
+    dpadRect = null;
+    if (visible) applyVisible(true);
+  });
+  // backgrounding: input.js releaseAll() already clears pad INPUT state; also
+  // reset the pad's own visuals so nothing looks stuck-pressed on return
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) resetVisuals();
+  });
+  window.addEventListener('blur', resetVisuals);
+}
+
+function resetVisuals() {
+  setDir(null);
+  if (aEl) aEl.classList.remove('press');
+  if (bEl) bEl.classList.remove('press');
+  if (pauseEl) pauseEl.classList.remove('press');
 }
 
 function setDir(dir) {
