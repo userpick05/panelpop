@@ -21,10 +21,38 @@ Future<void> main() async {
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
   // Prepare the writable game copy and serve it locally (stable origin).
-  final www = await WebBundle.ensureBundle();
-  final port = await LocalServer.start(www);
+  // If startup fails (e.g. the fixed port is held by another app, or asset
+  // extraction fails), show an error screen instead of a black window.
+  try {
+    final www = await WebBundle.ensureBundle();
+    final port = await LocalServer.start(www);
+    runApp(PanelPopApp(url: 'http://127.0.0.1:$port/index.html'));
+  } catch (e) {
+    runApp(const _BootErrorApp());
+  }
+}
 
-  runApp(PanelPopApp(url: 'http://127.0.0.1:$port/index.html'));
+class _BootErrorApp extends StatelessWidget {
+  const _BootErrorApp();
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Color(0xFF08081A),
+        body: Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              "Couldn't start PANEL POP.\nClose other apps and reopen.",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Color(0xFFE8E8F4), fontSize: 16),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class PanelPopApp extends StatelessWidget {

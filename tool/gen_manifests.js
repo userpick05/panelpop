@@ -32,7 +32,7 @@ fs.writeFileSync(path.join(otaDir, 'web.json'),
 // apk.json — native shell version from pubspec, apk hosted on the matching
 // GitHub release. Notes are optional and shown in the update banner.
 var pubspec = fs.readFileSync(path.join(root, 'app', 'pubspec.yaml'), 'utf8');
-var pv = pubspec.match(/^version:\s*([0-9.]+)\+/m);
+var pv = pubspec.match(/^version:\s*([0-9.]+)/m);
 var nativeVersion = pv ? pv[1] : webVersion;
 var apkUrl = 'https://github.com/' + GH_USER + '/' + REPO +
   '/releases/download/v' + nativeVersion + '/panelpop-' + nativeVersion + '.apk';

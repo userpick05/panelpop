@@ -14,27 +14,44 @@ class LocalServer {
   static Future<int> start(String rootDir) async {
     // Reuse if already up (hot restart in dev).
     if (_server != null) return _server!.port;
-    final server =
-        await HttpServer.bind(InternetAddress.loopbackIPv4, kLocalPort, shared: true);
-    _server = server;
-    server.listen((req) => _handle(req, rootDir));
-    return server.port;
+    // The port is FIXED so the WebView origin never changes (saves survive).
+    // Never fall back to an ephemeral port — that would split localStorage.
+    // Retry a few times to ride out our own socket lingering in TIME_WAIT;
+    // if a foreign app truly holds the port, rethrow so main() can show an
+    // error screen rather than launch onto a dead origin.
+    for (var attempt = 0;; attempt++) {
+      try {
+        final server = await HttpServer.bind(
+            InternetAddress.loopbackIPv4, kLocalPort,
+            shared: true);
+        _server = server;
+        server.listen((req) => _handle(req, rootDir));
+        return server.port;
+      } on SocketException {
+        if (attempt >= 3) rethrow;
+        await Future.delayed(const Duration(milliseconds: 250));
+      }
+    }
   }
 
   static Future<void> _handle(HttpRequest req, String rootDir) async {
     try {
-      var p = Uri.decodeComponent(req.uri.path);
+      var p = req.uri.path; // already decoded by Uri
       if (p == '/' || p.isEmpty) p = '/index.html';
-      // keep the request inside rootDir
-      final normalized = p.replaceAll('..', '');
-      final file = File('$rootDir$normalized');
+      // reject any traversal outright — legit game paths never contain '..'
+      if (p.contains('..')) {
+        req.response.statusCode = HttpStatus.notFound;
+        await req.response.close();
+        return;
+      }
+      final file = File('$rootDir$p');
       if (!await file.exists()) {
         req.response.statusCode = HttpStatus.notFound;
         await req.response.close();
         return;
       }
       req.response.headers.set('Cache-Control', 'no-store');
-      req.response.headers.contentType = _mime(normalized);
+      req.response.headers.contentType = _mime(p);
       await req.response.addStream(file.openRead());
       await req.response.close();
     } catch (_) {
