@@ -25,11 +25,13 @@ function setupCanvas() {
 }
 
 function resize() {
-  // fit into the #screen box (the area above the control deck in portrait GB
-  // mode; the whole viewport on desktop), preserving aspect.
+  // In GB (portrait) mode fit into the #screen box (the area above the control
+  // deck). Otherwise measure the window — on desktop #screen shrink-wraps to
+  // the canvas, so measuring it would be circular and pin the game to 480x270.
+  var gb = document.body.classList.contains('gb');
   var host = document.getElementById('screen');
-  var ww = host ? host.clientWidth : window.innerWidth;
-  var wh = host ? host.clientHeight : window.innerHeight;
+  var ww = (gb && host) ? host.clientWidth : window.innerWidth;
+  var wh = (gb && host) ? host.clientHeight : window.innerHeight;
   if (!ww || !wh) { ww = window.innerWidth; wh = window.innerHeight; }
   var s = Math.min(ww / W, wh / H);
   if (!isFinite(s) || s <= 0.1) s = 1;
@@ -57,7 +59,11 @@ function showToast(m) { toast.msg = m; toast.t = 90; }
 
 var screen = null;
 var fadeT = 0; // brief fade-in on every screen change
-function go(s) { screen = s; fadeT = 8; if (s.enter) s.enter(); }
+function go(s) {
+  screen = s; fadeT = 8;
+  if (window.Input) Input.padClear(); // don't carry a held D-pad dir across screens
+  if (s.enter) s.enter();
+}
 
 // dev/debug handle (harmless in production; used by automated verification)
 window.__pp = {

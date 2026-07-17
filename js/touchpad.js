@@ -187,10 +187,14 @@ function applyShown(show) {
   if (!show) { Input.padClear(); resetVisuals(); }
 }
 
-// called each frame; the deck is permanent on touch devices (all screens)
+// called each frame; the GB deck is permanent on touch devices in PORTRAIT
+// (all screens). In landscape (rotated phone, or a portrait web bundle served
+// into a not-yet-updated landscape shell) it falls back to the centered canvas
+// + tap controls rather than a cramped deck.
 function setActive() {
   if (!built) build();
-  var want = enabled();
+  var portrait = window.innerHeight >= window.innerWidth;
+  var want = enabled() && portrait;
   if (want !== shown) applyShown(want);
 }
 
