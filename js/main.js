@@ -652,6 +652,9 @@ function setupMatch(match, side) {
     if (game && game.kind === 'net' && side === 'h') match.nextRound(baseSeed());
   };
   match.onRoundStart = function () {
+    // clear the relay buffers so a rematch doesn't compare against round-1's
+    // stale remote hashes/inputs (harmless no-op on round 1)
+    match.resetStreams();
     match.readSeed(function (s) { if (s != null) beginNetMatch(match, side, s); });
   };
 }
