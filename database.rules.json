@@ -1,0 +1,24 @@
+{
+  "rules": {
+    "scores": {
+      ".read": true,
+      "$mode": {
+        ".indexOn": ["score"],
+        "$entry": {
+          ".write": "!data.exists() && newData.exists()",
+          ".validate": "newData.hasChildren(['name','score','ts']) && newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 9999999 && newData.child('name').isString() && newData.child('name').val().length <= 4 && newData.child('ts').val() == now"
+        }
+      }
+    },
+    "rooms": {
+      ".read": true,
+      "$code": {
+        ".write": true,
+        "meta": { ".validate": "!data.exists() || newData.child('host').isString()" },
+        "g": {
+          "joined": { ".validate": "!data.exists()" }
+        }
+      }
+    }
+  }
+}

@@ -502,9 +502,11 @@ var leaderboardScreen = {
     } else {
       for (var i = 0; i < this.scores.length; i++) {
         var s = this.scores[i], c = i < 3 ? COL_ACC : COL_TEXT;
+        var nm = String(s.name || '???').slice(0, 4); // untrusted remote value
+        var sc = Math.max(0, Math.min(9999999, s.score | 0));
         text((i + 1) + '.', W / 2 - 84, y + i * 13, COL_DIM);
-        text(s.name, W / 2 - 62, y + i * 13, c);
-        text(pad(s.score, 7), W / 2 + 14, y + i * 13, c);
+        text(nm, W / 2 - 62, y + i * 13, c);
+        text(pad(sc, 7), W / 2 + 14, y + i * 13, c);
       }
     }
     ctext('LEFT/RIGHT SWITCH   ESC BACK', W / 2, H - 12, COL_DIM);
@@ -549,13 +551,14 @@ function startHost() {
   Net.createRoom(currentTag(), function (match, code) {
     if (!match || lobby.cancelled) { if (match) match.leave(); if (lobby) lobby.status = 'FAILED'; return; }
     lobby.match = match; lobby.code = code; lobby.status = 'WAITING FOR PLAYER';
+    setupMatch(match, 'h');
     match.ref.child('g/joined').on('value', function (snap) {
       if (snap.val() && !lobby.started) {
         lobby.started = true;
         match.ref.child('g/joined').off();
-        var seed = baseSeed();
-        match.startMatch(seed);
-        beginNetMatch(match, 'h', seed);
+        // sets seed + round=1 -> the round listener drives beginNetMatch on
+        // BOTH peers (single start path)
+        match.startMatch(baseSeed());
       }
     });
   });
@@ -567,11 +570,9 @@ function startJoin(code) {
     if (!match) { lobby.status = err === 'full' ? 'ROOM FULL' : 'NO SUCH ROOM'; return; }
     if (lobby.cancelled) { match.leave(); return; }
     lobby.match = match; lobby.status = 'CONNECTING...';
-    var seedRef = match.ref.child('seed');
-    seedRef.on('value', function (snap) {
-      var seed = snap.val();
-      if (seed != null && !lobby.started) { lobby.started = true; seedRef.off(); beginNetMatch(match, 'g', seed); }
-    });
+    setupMatch(match, 'g');
+    // the host sets round=1 once it sees us join -> our round listener fires
+    // -> beginNetMatch. No separate seed listener needed.
   });
 }
 var lobbyScreen = {
@@ -636,6 +637,23 @@ function beginNetMatch(match, side, seed) {
   Fx.clear();
   Audio2.playSong('play');
   go(gameScreen);
+}
+
+// Match-level callbacks are set ONCE (not per round). Every match start —
+// round 1 and every rematch — is driven by the single `round` listener, so
+// beginNetMatch runs exactly once per round on each peer.
+function setupMatch(match, side) {
+  match.onOpponentLeave = function () {
+    if (!game || game.kind !== 'net') return;
+    game.oppLeft = true;
+    if (!game.over) { game.over = true; game.overT = 0; game.winner = 1; Audio2.sfx.win(); }
+  };
+  match.onRematch = function () {
+    if (game && game.kind === 'net' && side === 'h') match.nextRound(baseSeed());
+  };
+  match.onRoundStart = function () {
+    match.readSeed(function (s) { if (s != null) beginNetMatch(match, side, s); });
+  };
 }
 
 function endNetMatch(g) {
@@ -1082,6 +1100,7 @@ var gameScreen = {
     while (g.simFrame < g.genFrame - g.DELAY && steps < 8) {
       var ri = m.getRemoteInput(g.simFrame);
       if (ri === null) { g.waiting = true; break; } // stall until the peer's input arrives
+      g.waitTicks = 0;
       var lin = g.localInputs[g.simFrame] || { left: false, right: false, up: false, down: false, swap: false, raise: false };
       var hIn = g.side === 'h' ? lin : ri;
       var gIn = g.side === 'h' ? ri : lin;
@@ -1110,7 +1129,16 @@ var gameScreen = {
         delete g.localHashes[f];
       }
     }
-    m.flush(); // push the partial batch each tick so the peer isn't starved
+    // liveness: if the peer's inputs stop arriving for too long (a frozen /
+    // silently-dropped client whose onDisconnect never fired), end the match
+    // rather than hang forever.
+    if (g.waiting) {
+      g.waitTicks = (g.waitTicks || 0) + 1;
+      if (g.waitTicks > 8 * 60 && !g.over) { // ~8s of no peer input
+        g.oppLeft = true; g.over = true; g.overT = 0; g.winner = 1; Audio2.sfx.win();
+        if (m.leave) m.leave();
+      }
+    }
   },
 
   updateSolo: function () {

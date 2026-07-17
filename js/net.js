@@ -77,7 +77,8 @@ function fetchTop(mode, n, cb) {
 // is auto-derived. Inputs are batched (K frames per write) to keep RTDB writes
 // modest. Frame N's input is read via getRemote(N); undefined until it arrives.
 
-var BATCH = 5; // frames per relayed batch
+var BATCH = 3; // frames per relayed batch (inputs are generated every frame,
+               // so a batch fills every BATCH frames on its own)
 
 function NetMatch(code, side) {
   this.code = code;
@@ -125,7 +126,10 @@ NetMatch.prototype._bind = function () {
   });
 };
 
-// queue a local input for frame `frame`; flushes a batch every BATCH frames
+// queue a local input for frame `frame`; a batch is emitted every BATCH
+// frames. Inputs are generated every frame, so batches fill on their own —
+// there is NO per-tick flush (that would emit 1-frame batches that overwrite
+// each other's key and never fire child_added on the peer).
 NetMatch.prototype.sendInput = function (frame, input) {
   if (this.pending.length === 0) this.pendingStart = frame;
   this.pending.push(packInput(input));
@@ -133,13 +137,15 @@ NetMatch.prototype.sendInput = function (frame, input) {
 };
 NetMatch.prototype._flush = function () {
   if (this.pending.length === 0) return;
-  var idx = Math.floor(this.pendingStart / BATCH);
   try {
-    this.ref.child(this.side + '/in/' + idx).set({ s: this.pendingStart, d: this.pending.slice() });
+    // push() => a unique key per batch, so every batch fires child_added on
+    // the peer (a keyed set() would overwrite and drop frames). The receiver
+    // is idempotent (remote[s+i]=d[i]), so any overlap is harmless.
+    this.ref.child(this.side + '/in').push({ s: this.pendingStart, d: this.pending.slice() });
   } catch (e) {}
   this.pending = [];
 };
-NetMatch.prototype.flush = function () { this._flush(); }; // force (end of tick)
+NetMatch.prototype.flush = function () { this._flush(); }; // force a partial (round end)
 
 NetMatch.prototype.getRemote = function (frame) { return this.remote[frame]; };
 NetMatch.prototype.getRemoteInput = function (frame) {
