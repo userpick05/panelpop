@@ -1,15 +1,17 @@
 {
-  "webVersion": "0.6.0",
+  "webVersion": "0.7.0",
   "files": [
     "index.html",
     "js/ai.js",
     "js/audio.js",
     "js/backgrounds.js",
     "js/engine.js",
+    "js/firebase-config.js",
     "js/font.js",
     "js/fx.js",
     "js/input.js",
     "js/main.js",
+    "js/net.js",
     "js/puzzle.js",
     "js/render.js",
     "js/rng.js",

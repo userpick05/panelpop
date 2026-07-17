@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.7.0 — 2026-07-13 (branch feature-v0.7-online)
+
+Online — leaderboards + real-time versus, all fail-silent (offline or before
+a Firebase project is configured, the game runs exactly as before).
+
+- **Online leaderboards** — global top-10 for Endless and Score Attack. Set a
+  4-letter pilot name; scores submit on game over. Falls back to your local
+  best when offline.
+- **Online Versus** — real-time head-to-head over **room codes**: HOST gets a
+  code to share, JOIN enters it. Runs delay-based **lockstep** on the
+  deterministic engine (both sides simulate both boards from one seed +
+  exchanged inputs, so the garbage stays perfectly in sync), with board-hash
+  **desync detection**. **Rematch** in the same room after a match; forfeit on
+  quit. Powered by a Firebase relay (no dedicated server).
+- Firebase config lives in `js/firebase-config.js` (null until you create a
+  project — see README). New: `js/net.js`, `tool/gen_manifests.js` already
+  syncs the new files; `tool/test_lockstep.js` proves two peers stay
+  bit-identical over 1500 frames.
+
 ## v0.6.0 — 2026-07-12 (branch feature-v0.5-ota)
 
 - **Virtual on-screen controls for phones.** A translucent thumb **D-pad**
