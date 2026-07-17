@@ -3,7 +3,7 @@
 
 (function () {
 
-var APP_VERSION = '0.7.0';
+var APP_VERSION = '0.8.0';
 
 var W = 480, H = 270;
 var canvas, ctx;
@@ -25,13 +25,14 @@ function setupCanvas() {
 }
 
 function resize() {
-  var ww = window.innerWidth, wh = window.innerHeight;
+  // fit into the #screen box (the area above the control deck in portrait GB
+  // mode; the whole viewport on desktop), preserving aspect.
+  var host = document.getElementById('screen');
+  var ww = host ? host.clientWidth : window.innerWidth;
+  var wh = host ? host.clientHeight : window.innerHeight;
+  if (!ww || !wh) { ww = window.innerWidth; wh = window.innerHeight; }
   var s = Math.min(ww / W, wh / H);
-  if (!isFinite(s) || s <= 0.1) s = 1; // window not measurable yet
-  // Always scale to the largest aspect-preserving fit so the game fills the
-  // screen. (image-rendering:pixelated keeps it crisp at fractional scale;
-  // an earlier integer-snap floored phones whose fit was ~1.5-1.9 down to 1x,
-  // rendering the board tiny in the middle of the display.)
+  if (!isFinite(s) || s <= 0.1) s = 1;
   canvas.style.width = Math.round(W * s) + 'px';
   canvas.style.height = Math.round(H * s) + 'px';
 }
@@ -1544,6 +1545,8 @@ function boot() {
   SpritesBuild();
   Backgrounds.build();
   setupCanvas();
+  Touchpad.setActive(); // build the deck + apply gb layout before first sizing
+  resize();
   go(titleScreen);
 
   var last = performance.now();
@@ -1555,6 +1558,7 @@ function boot() {
     var steps = 0;
     while (acc >= 1000 / 60 && steps < 3) {
       handleGlobalKeys();
+      Input.pumpPadMenu(); // D-pad -> menu nav on every screen
       screen.update();
       if (fadeT > 0) fadeT--; // sim-rate so the fade lasts the same everywhere
       Input.endFrame();
@@ -1570,9 +1574,8 @@ function boot() {
       ctx.fillStyle = 'rgba(8,8,20,' + (fadeT / 8 * 0.8).toFixed(3) + ')';
       ctx.fillRect(0, 0, W, H);
     }
-    // virtual pad (phones): visible only during active play
-    Touchpad.setActive(screen === gameScreen && !!game && !game.paused &&
-      !game.over && (game.countdown | 0) <= 0);
+    // Game-Boy control deck: permanent on touch devices (all screens)
+    Touchpad.setActive();
   }
   requestAnimationFrame(loop);
 }

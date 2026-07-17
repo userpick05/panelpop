@@ -1,22 +1,22 @@
-// PANEL POP — virtual on-screen controls for phones (app + mobile web).
+// PANEL POP — on-screen Game-Boy-style control deck for phones.
 //
-// A translucent overlay: a round thumb D-pad (bottom-left), SWAP + RAISE
-// action buttons (bottom-right), and a small pause button (top-right). It
-// feeds the same Input pad state the keyboard uses, so the engine is unaware.
-// Auto-shown on coarse-pointer / touch devices; hidden on desktop. Only
-// visible during active play (hidden on menus / pause / countdown).
+// A permanent bottom panel (shown on ALL screens on touch devices, hidden on
+// desktop): a thumb D-pad on the left, A / B buttons on the right, and a RAISE
+// button in the middle. It feeds the same Input pad state the keyboard uses, so
+// it drives BOTH menu navigation (D-pad + A=OK + B=back) and gameplay (cursor +
+// SWAP + RAISE + pause). Adding `body.gb` switches the page to the portrait
+// "screen on top, controls below" layout.
 'use strict';
 
 (function () {
 
-var root = null, dpadEl = null, arrows = {}, aEl = null, bEl = null, pauseEl = null;
+var root = null, dpadEl = null, arrows = {}, aEl = null, bEl = null, raiseEl = null;
 var mode = 'auto';          // 'auto' | 'on' | 'off'
-var built = false, visible = false;
+var built = false, shown = false;
 var dpadPointer = null, dpadRect = null, curDir = null;
 
-// touch-PRIMARY device (phone/tablet): a coarse pointer with no hover. This
-// excludes desktops and touch laptops (which have a mouse -> hover:hover), so
-// keyboard players never see the pad; a forced mode can still turn it on.
+// touch-PRIMARY device (phone/tablet): a coarse pointer with no hover. Excludes
+// desktops and touch laptops (which have a mouse -> hover:hover).
 function isTouchDevice() {
   if (window.matchMedia) {
     return window.matchMedia('(pointer: coarse)').matches &&
@@ -31,26 +31,41 @@ function enabled() {
 }
 
 var CSS =
-'.tpad{position:fixed;inset:0;z-index:20;pointer-events:none;touch-action:none;' +
-'display:none;-webkit-user-select:none;user-select:none;}' +
-'.tpad.on{display:block;}' +
-'.tp-dpad{position:fixed;left:16px;bottom:16px;width:132px;height:132px;' +
-'border-radius:50%;background:rgba(28,28,52,0.30);border:2px solid rgba(255,255,255,0.14);' +
-'pointer-events:auto;touch-action:none;}' +
-'.tp-ar{position:absolute;color:rgba(255,255,255,0.55);font:700 18px sans-serif;' +
-'left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;}' +
-'.tp-ar.u{top:14px;}.tp-ar.d{top:auto;bottom:14px;transform:translate(-50%,0);}' +
-'.tp-ar.l{left:16px;transform:translate(0,-50%);}.tp-ar.r{left:auto;right:16px;transform:translate(0,-50%);}' +
+// deck: a flex child at the bottom of the column layout (see index.html .gb)
+'#tp-deck{display:none;flex:0 0 auto;height:clamp(240px,46vh,440px);width:100%;' +
+'box-sizing:border-box;align-items:center;justify-content:space-between;' +
+'padding:0 5vw;background:linear-gradient(#18182e,#101019);' +
+'border-top:2px solid rgba(255,255,255,0.06);touch-action:none;' +
+'-webkit-user-select:none;user-select:none;z-index:20;}' +
+'body.gb #tp-deck{display:flex;}' +
+// D-pad — a rounded cross; the whole square is the thumb zone (dominant axis)
+'.tp-dpad{position:relative;width:38vmin;height:38vmin;max-width:210px;max-height:210px;' +
+'border-radius:24%;background:#26264a;border:2px solid rgba(255,255,255,0.10);' +
+'box-shadow:inset 0 2px 0 rgba(255,255,255,0.06);touch-action:none;}' +
+'.tp-cross{position:absolute;background:#33335c;border-radius:6px;}' +
+'.tp-cross.h{left:14%;right:14%;top:34%;bottom:34%;}' +
+'.tp-cross.v{top:14%;bottom:14%;left:34%;right:34%;}' +
+'.tp-ar{position:absolute;color:rgba(255,255,255,0.6);font:700 4.6vmin sans-serif;' +
+'transform:translate(-50%,-50%);pointer-events:none;}' +
+'.tp-ar.u{left:50%;top:14%;}.tp-ar.d{left:50%;top:86%;}' +
+'.tp-ar.l{left:14%;top:50%;}.tp-ar.r{left:86%;top:50%;}' +
 '.tp-ar.on{color:#f2ca4e;}' +
-'.tp-btn{position:fixed;pointer-events:auto;touch-action:none;border-radius:50%;' +
-'background:rgba(28,28,52,0.40);border:2px solid rgba(255,255,255,0.18);color:#e8e8f4;' +
-'display:flex;align-items:center;justify-content:center;font:700 12px sans-serif;' +
-'text-align:center;line-height:1.05;}' +
-'.tp-btn.press{background:rgba(242,202,78,0.55);color:#101020;}' +
-'.tp-a{right:22px;bottom:26px;width:78px;height:78px;font-size:13px;}' +
-'.tp-b{right:104px;bottom:78px;width:62px;height:62px;font-size:11px;}' +
-'.tp-pause{right:14px;top:12px;width:40px;height:40px;font-size:15px;' +
-'background:rgba(28,28,52,0.40);}';
+// right button cluster
+'.tp-right{position:relative;width:40vmin;height:38vmin;max-width:220px;max-height:210px;}' +
+'.tp-btn{position:absolute;touch-action:none;border-radius:50%;font:700 4vmin sans-serif;' +
+'display:flex;align-items:center;justify-content:center;color:#101020;' +
+'border:2px solid rgba(0,0,0,0.25);box-shadow:0 2px 0 rgba(0,0,0,0.3);}' +
+'.tp-btn.press{transform:translateY(2px);box-shadow:none;filter:brightness(1.2);}' +
+'.tp-a{right:2vmin;bottom:6vmin;width:19vmin;height:19vmin;max-width:104px;max-height:104px;' +
+'background:#f27d9d;}' +
+'.tp-b{right:20vmin;bottom:15vmin;width:16vmin;height:16vmin;max-width:88px;max-height:88px;' +
+'background:#7f8fe8;}' +
+// RAISE in the middle (Start/Select spot)
+'.tp-raise{position:relative;width:20vmin;max-width:120px;height:8vmin;max-height:44px;' +
+'border-radius:22px;background:#2a2a48;border:2px solid rgba(255,255,255,0.12);' +
+'color:#e8e8f4;font:700 3vmin sans-serif;display:flex;align-items:center;' +
+'justify-content:center;touch-action:none;}' +
+'.tp-raise.press{background:rgba(242,202,78,0.5);color:#101020;}';
 
 function make(cls, html) {
   var d = document.createElement('div');
@@ -66,34 +81,37 @@ function build() {
   style.textContent = CSS;
   document.head.appendChild(style);
 
-  root = make('tpad');
+  root = make('', '');
+  root.id = 'tp-deck';
+
   dpadEl = make('tp-dpad');
+  dpadEl.appendChild(make('tp-cross h'));
+  dpadEl.appendChild(make('tp-cross v'));
   arrows.up = make('tp-ar u', '&#9650;');
   arrows.down = make('tp-ar d', '&#9660;');
   arrows.left = make('tp-ar l', '&#9664;');
   arrows.right = make('tp-ar r', '&#9654;');
   dpadEl.appendChild(arrows.up); dpadEl.appendChild(arrows.down);
   dpadEl.appendChild(arrows.left); dpadEl.appendChild(arrows.right);
-  aEl = make('tp-btn tp-a', 'SWAP');
-  bEl = make('tp-btn tp-b', 'RAISE');
-  pauseEl = make('tp-btn tp-pause', '&#10073;&#10073;');
-  root.appendChild(dpadEl); root.appendChild(aEl);
-  root.appendChild(bEl); root.appendChild(pauseEl);
+
+  raiseEl = make('tp-raise', 'RAISE');
+
+  var right = make('tp-right');
+  aEl = make('tp-btn tp-a', 'A');
+  bEl = make('tp-btn tp-b', 'B');
+  right.appendChild(bEl); right.appendChild(aEl);
+
+  root.appendChild(dpadEl);
+  root.appendChild(raiseEl);
+  root.appendChild(right);
   document.body.appendChild(root);
 
   wireDpad();
-  wireButton(aEl, 'swap', false);
-  wireButton(bEl, 'raise', true);
-  wirePause();
+  wireButton(aEl, 'swap', false);   // A = swap in game / OK in menus
+  wireButton(bEl, 'back', false);   // B = back in menus / pause in game
+  wireButton(raiseEl, 'raise', true); // RAISE = hold to raise
 
-  // re-evaluate auto visibility if the device orientation/inputs change; drop
-  // the cached D-pad rect so a rotation mid-hold recomputes the center
-  window.addEventListener('resize', function () {
-    dpadRect = null;
-    if (visible) applyVisible(true);
-  });
-  // backgrounding: input.js releaseAll() already clears pad INPUT state; also
-  // reset the pad's own visuals so nothing looks stuck-pressed on return
+  window.addEventListener('resize', function () { dpadRect = null; });
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) resetVisuals();
   });
@@ -104,7 +122,7 @@ function resetVisuals() {
   setDir(null);
   if (aEl) aEl.classList.remove('press');
   if (bEl) bEl.classList.remove('press');
-  if (pauseEl) pauseEl.classList.remove('press');
+  if (raiseEl) raiseEl.classList.remove('press');
 }
 
 function setDir(dir) {
@@ -122,7 +140,7 @@ function wireDpad() {
     var cx = dpadRect.left + dpadRect.width / 2;
     var cy = dpadRect.top + dpadRect.height / 2;
     var dx = e.clientX - cx, dy = e.clientY - cy;
-    var dz = 16;
+    var dz = dpadRect.width * 0.12;
     if (Math.abs(dx) < dz && Math.abs(dy) < dz) { setDir(null); return; }
     if (Math.abs(dx) > Math.abs(dy)) setDir(dx > 0 ? 'right' : 'left');
     else setDir(dy > 0 ? 'down' : 'up');
@@ -155,49 +173,28 @@ function wireButton(el, ctrl, held) {
     Input.padSet(ctrl, true);
     el.classList.add('press');
   }, { passive: false });
-  function up(e) {
-    // edge controls (swap) auto-release; held controls (raise) release now
-    if (held) Input.padSet(ctrl, false);
+  function up() {
+    if (held) Input.padSet(ctrl, false); // edge buttons auto-release
     el.classList.remove('press');
   }
   el.addEventListener('pointerup', up);
   el.addEventListener('pointercancel', up);
 }
 
-function wirePause() {
-  pauseEl.addEventListener('pointerdown', function (e) {
-    e.preventDefault();
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape' }));
-    pauseEl.classList.add('press');
-  }, { passive: false });
-  function up() { pauseEl.classList.remove('press'); }
-  pauseEl.addEventListener('pointerup', up);
-  pauseEl.addEventListener('pointercancel', up);
+function applyShown(show) {
+  shown = show;
+  document.body.classList.toggle('gb', show);
+  if (!show) { Input.padClear(); resetVisuals(); }
 }
 
-function applyVisible(show) {
-  visible = show;
-  if (!root) return;
-  root.classList.toggle('on', show);
-  if (!show) {
-    // never let a control stick when the pad hides
-    Input.padClear();
-    setDir(null);
-    if (aEl) aEl.classList.remove('press');
-    if (bEl) bEl.classList.remove('press');
-  }
-}
-
-// called each frame by the game: show only during active play, and only when
-// this device wants the pad at all
-function setActive(playing) {
+// called each frame; the deck is permanent on touch devices (all screens)
+function setActive() {
   if (!built) build();
-  var want = enabled() && playing;
-  if (want !== visible) applyVisible(want);
+  var want = enabled();
+  if (want !== shown) applyShown(want);
 }
 
-function setMode(m) { mode = m; } // 'auto' | 'on' | 'off' (verification/opt-in)
+function setMode(m) { mode = m; if (built) setActive(); }
 
 window.Touchpad = { setActive: setActive, setMode: setMode, enabled: enabled };
 

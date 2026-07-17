@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.8.0 — 2026-07-13 (branch feature-v0.8-portrait)
+
+Portrait, Game-Boy-style controls on phones.
+
+- **Portrait orientation** — the Android app is now portrait; the game screen
+  sits at the top with a control deck below (web layout switches to a
+  `screen + deck` column on touch devices; desktop still centers the canvas).
+- **On-screen D-pad + A / B / RAISE buttons, on every screen** — big, always
+  visible, so you drive the menus and the game with the pad instead of poking
+  small text. D-pad = move cursor / navigate menus; A = swap / confirm;
+  B = back / pause; RAISE = hold to raise. Feeds the same input pipeline as the
+  keyboard, so nothing downstream changed.
+
 ## v0.7.0 — 2026-07-13 (branch feature-v0.7-online)
 
 Online — leaderboards + real-time versus, all fail-silent (offline or before

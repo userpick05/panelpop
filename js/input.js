@@ -96,18 +96,26 @@ function dasDir(p, dir, map) {
 // difference. Directions get the same DAS auto-repeat as keys.
 var padHeld = { left: false, right: false, up: false, down: false };
 var padDas = { left: 0, right: 0, up: 0, down: 0 };
+var padMenuDas = { left: 0, right: 0, up: 0, down: 0 };
 var padRaise = false;
 var padSwapEdge = false;
 
-// ctrl: 'left'|'right'|'up'|'down' (held) | 'raise' (held) | 'swap' (edge)
+// ctrl: 'left'|'right'|'up'|'down' (held, drives cursor + menu nav) |
+// 'raise' (held) | 'swap' (edge; also = menu OK) | 'back' (edge; menu back +
+// in-game pause)
 function padSet(ctrl, pressed) {
-  if (ctrl === 'swap') { if (pressed) padSwapEdge = true; }
+  if (ctrl === 'swap') { if (pressed) { padSwapEdge = true; menuQueue.push('ok'); } }
+  else if (ctrl === 'back') { if (pressed) { menuQueue.push('back'); globalQueue.push('pause'); } }
   else if (ctrl === 'raise') { padRaise = pressed; }
-  else if (ctrl in padHeld) { padHeld[ctrl] = pressed; if (!pressed) padDas[ctrl] = 0; }
+  else if (ctrl in padHeld) {
+    padHeld[ctrl] = pressed;
+    if (!pressed) { padDas[ctrl] = 0; padMenuDas[ctrl] = 0; }
+  }
 }
 function padClear() {
   padHeld.left = padHeld.right = padHeld.up = padHeld.down = false;
   padDas.left = padDas.right = padDas.up = padDas.down = 0;
+  padMenuDas.left = padMenuDas.right = padMenuDas.up = padMenuDas.down = 0;
   padRaise = false; padSwapEdge = false;
 }
 function padDir(dir) {
@@ -116,6 +124,17 @@ function padDir(dir) {
   if (c === 0) return true;
   if (c >= DAS_DELAY && (c - DAS_DELAY) % DAS_RATE === 0) return true;
   return false;
+}
+// push held D-pad directions into the menu queue (slower, own DAS) so the pad
+// navigates menus everywhere, not just gameplay. Call once per frame.
+function pumpPadMenu() {
+  var dirs = ['up', 'down', 'left', 'right'];
+  for (var i = 0; i < dirs.length; i++) {
+    var d = dirs[i];
+    if (!padHeld[d]) { padMenuDas[d] = 0; continue; }
+    var c = padMenuDas[d]++;
+    if (c === 0 || (c >= 16 && (c - 16) % 7 === 0)) menuQueue.push(d);
+  }
 }
 
 // per-frame board input for player p. combined=true merges both mappings
@@ -228,7 +247,8 @@ window.Input = {
   pointers: pointers,
   consumePointers: consumePointers,
   padSet: padSet,
-  padClear: padClear
+  padClear: padClear,
+  pumpPadMenu: pumpPadMenu
 };
 
 })();
