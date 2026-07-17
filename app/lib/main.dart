@@ -136,15 +136,40 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       action: SnackBarAction(
         label: 'UPDATE',
         textColor: const Color(0xFFf2ca4e),
-        onPressed: () async {
-          try {
-            await ApkUpdate.downloadAndInstall(info);
-          } catch (e) {
-            if (mounted) _snack('Update failed: $e');
-          }
-        },
+        onPressed: () => _runApkUpdate(info),
       ),
     ));
+  }
+
+  // Download the APK with visible progress (the download is ~45 MB, so a
+  // silent background fetch looks like "nothing happened"), then hand off to
+  // the system installer.
+  Future<void> _runApkUpdate(ApkUpdateInfo info) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    var pct = 0;
+    void showProgress() {
+      messenger.showSnackBar(SnackBar(
+        content: Text('Downloading update… $pct%'),
+        backgroundColor: const Color(0xFF22223c),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(minutes: 5),
+      ));
+    }
+    showProgress();
+    try {
+      var last = 0;
+      await ApkUpdate.downloadAndInstall(info, onProgress: (p) {
+        final v = (p * 100).round();
+        if (v >= last + 10) { last = v; pct = v; showProgress(); } // refresh every ~10%
+      });
+      if (mounted) {
+        messenger.hideCurrentSnackBar();
+        _snack('Tap INSTALL in the system prompt to finish.');
+      }
+    } catch (e) {
+      if (mounted) { messenger.hideCurrentSnackBar(); _snack('Update failed: $e'); }
+    }
   }
 
   // Android back = Esc (pause / menu back). Exit via home/recents like any game.

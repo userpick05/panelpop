@@ -29,11 +29,15 @@ if (!fs.existsSync(otaDir)) fs.mkdirSync(otaDir);
 fs.writeFileSync(path.join(otaDir, 'web.json'),
   JSON.stringify({ webVersion: webVersion, files: files }, null, 2) + '\n');
 
-// apk.json — native shell version from pubspec, apk hosted on the matching
-// GitHub release. Notes are optional and shown in the update banner.
-var pubspec = fs.readFileSync(path.join(root, 'app', 'pubspec.yaml'), 'utf8');
-var pv = pubspec.match(/^version:\s*([0-9.]+)/m);
-var nativeVersion = pv ? pv[1] : webVersion;
+// apk.json — the NATIVE SHELL version, read from config.dart's kNativeVersion
+// (NOT pubspec — pubspec's version is just the per-build APK identity). This
+// keeps the two update tracks decoupled: bump kNativeVersion ONLY when the
+// Dart/native shell actually changes, so web-only game updates (new modes,
+// online, controls, all pure JS) ship silently via web OTA and never fire the
+// "app update available" banner.
+var cfg = fs.readFileSync(path.join(root, 'app', 'lib', 'ota', 'config.dart'), 'utf8');
+var nv = cfg.match(/kNativeVersion\s*=\s*'([^']+)'/);
+var nativeVersion = nv ? nv[1] : webVersion;
 var apkUrl = 'https://github.com/' + GH_USER + '/' + REPO +
   '/releases/download/v' + nativeVersion + '/panelpop-' + nativeVersion + '.apk';
 
