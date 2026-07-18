@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.8.1 — 2026-07-17 (branch feature-v0.8-portrait)
+
+Fix: the in-app APK update could sit on "Downloading update…" forever with no
+visible progress (native shell only — the game itself is unchanged).
+
+- **Real download feedback** — a modal progress dialog with a bar and live
+  `MB / MB (%)`, updated on every chunk. Previously progress was only shown
+  when the server reported a total size; GitHub's redirected asset sometimes
+  reports it as unknown, so the old snackbar sat frozen at 0% for the whole
+  ~45 MB download and looked hung.
+- **Stall timeout** — if the connection goes idle for 30 s mid-download it now
+  aborts with "Download stalled — check your connection" and a **RETRY**
+  action, instead of hanging indefinitely.
+- Also: follows redirects explicitly, clears any stale partial download before
+  starting, and cleans up the partial file on failure.
+
 ## v0.8.0 — 2026-07-13 (branch feature-v0.8-portrait)
 
 Portrait, Game-Boy-style controls on phones.

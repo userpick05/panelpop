@@ -2,6 +2,7 @@
 // itself changes. Mirrors the pattern used across the userpick05 apps: check a
 // version.json, and if it advertises a newer build, download the APK and hand
 // it to Android's package installer (one user tap to confirm).
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -48,29 +49,58 @@ class ApkUpdate {
     }
   }
 
-  /// Download the APK (progress 0..1) then launch the system installer.
+  /// Download the APK then launch the system installer. [onProgress] fires on
+  /// every chunk with (bytesReceived, totalBytes-or-null) — it reports the
+  /// running byte count even when the server sends no Content-Length (GitHub's
+  /// redirected asset sometimes reports the length as unknown), so the UI can
+  /// always show movement instead of appearing frozen at 0%.
+  ///
+  /// If the stream goes idle for [stallTimeout] (network dropped mid-download),
+  /// it aborts with a clear error rather than hanging forever.
   static Future<void> downloadAndInstall(ApkUpdateInfo info,
-      {void Function(double)? onProgress}) async {
+      {void Function(int received, int? total)? onProgress,
+      Duration stallTimeout = const Duration(seconds: 30)}) async {
     if (await Permission.requestInstallPackages.isDenied) {
       await Permission.requestInstallPackages.request();
     }
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/panelpop-${info.version}.apk');
+    // A stale partial from an earlier interrupted attempt would corrupt the
+    // install — always start clean.
+    if (await file.exists()) await file.delete();
 
-    final request = http.Request('GET', Uri.parse(info.apkUrl));
-    final response = await request.send();
+    final request = http.Request('GET', Uri.parse(info.apkUrl))
+      ..followRedirects = true
+      ..maxRedirects = 10;
+    final response =
+        await request.send().timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) {
       throw HttpException('Download failed (${response.statusCode})');
     }
-    final total = response.contentLength ?? 0;
+    final total =
+        (response.contentLength != null && response.contentLength! > 0)
+            ? response.contentLength
+            : null;
     var received = 0;
     final sink = file.openWrite();
-    await for (final chunk in response.stream) {
-      sink.add(chunk);
-      received += chunk.length;
-      if (total > 0) onProgress?.call(received / total);
+    try {
+      // .timeout on the stream surfaces a stalled connection as a TimeoutException
+      // (no bytes for stallTimeout) instead of an indefinite hang.
+      await for (final chunk in response.stream.timeout(stallTimeout)) {
+        sink.add(chunk);
+        received += chunk.length;
+        onProgress?.call(received, total);
+      }
+      await sink.flush();
+    } on TimeoutException {
+      await sink.close();
+      if (await file.exists()) await file.delete();
+      throw Exception('Download stalled — check your connection and retry.');
+    } catch (_) {
+      await sink.close();
+      if (await file.exists()) await file.delete();
+      rethrow;
     }
-    await sink.flush();
     await sink.close();
 
     final result = await OpenFilex.open(file.path);
