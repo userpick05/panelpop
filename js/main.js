@@ -406,7 +406,8 @@ var howToScreen = {
   draw: function () {
     drawBgPanels();
     ctext('HOW TO PLAY', W / 2, 20, COL_ACC, 2);
-    var x = 46, y = 48, dy = 11;
+    var port = isPortrait();
+    var x = port ? 8 : 46, y = 48, dy = 11, col = port ? 128 : 150;
     var lines = [
       ['MOVE CURSOR', 'WASD OR ARROWS'],
       ['SWAP PANELS', 'F OR . (P2 USES .)'],
@@ -425,7 +426,7 @@ var howToScreen = {
     ];
     for (var i = 0; i < lines.length; i++) {
       text(lines[i][0], x, y + i * dy, i < 4 ? COL_DIM : COL_TEXT);
-      text(lines[i][1], x + 150, y + i * dy, COL_TEXT);
+      text(lines[i][1], x + col, y + i * dy, COL_TEXT);
     }
     ctext('ENTER TO RETURN', W / 2, H - 14, COL_DIM);
   }

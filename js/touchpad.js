@@ -206,7 +206,10 @@ function applyShown(show) {
 // shell) it falls back to the centered canvas + tap controls.
 function setActive() {
   if (!built) build();
-  var portrait = window.innerHeight >= window.innerWidth;
+  // strict '>' so an exactly-square viewport reads as landscape here too —
+  // matches main.js resize() (vh > vw), so the deck can't show over a
+  // landscape-laid-out canvas at the vw===vh boundary
+  var portrait = window.innerHeight > window.innerWidth;
   var want = enabled() && portrait;
   if (want !== shown) applyShown(want);
 }
