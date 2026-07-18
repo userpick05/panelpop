@@ -62,6 +62,18 @@ function initPalette(idx) {
 // nothing heavy to pre-render. Palette state inits lazily on first tick.
 function build() { /* no-op */ }
 
+// track the live canvas size so the wash fills the whole screen (the canvas is
+// 480x270 in landscape but tall in portrait). Re-scatters the bokeh into the
+// new bounds so orbs cover the full area instead of clustering in a corner.
+function setSize(w, h) {
+  if (w === W && h === H) return;
+  W = w; H = h;
+  for (var i = 0; i < orbs.length; i++) {
+    orbs[i].x = Math.random() * W;
+    orbs[i].y = Math.random() * H;
+  }
+}
+
 // advance ambient motion one fixed 60 Hz step (called from the game update)
 function tick(idx) {
   idx = norm(idx);
@@ -175,7 +187,7 @@ function pulse(cx, amount, color) {
 }
 
 window.Backgrounds = {
-  build: build, tick: tick, draw: draw, halo: halo, pulse: pulse,
+  build: build, setSize: setSize, tick: tick, draw: draw, halo: halo, pulse: pulse,
   count: PALS.length
 };
 

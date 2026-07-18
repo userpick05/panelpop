@@ -3,19 +3,25 @@
 
 (function () {
 
-var APP_VERSION = '0.8.0';
+var APP_VERSION = '0.9.0';
 
-var W = 480, H = 270;
+// Two native layouts. Landscape (desktop / wide) is the original 480x270.
+// A portrait viewport switches to a TALL internal canvas — 270 wide, height
+// matched to the device aspect so it fills top-to-bottom with no letterbox —
+// and every screen lays out portrait-native. W/H are read everywhere, so
+// flipping them reflows the whole UI. isPortrait() keys the per-screen layout.
+var LAND_W = 480, LAND_H = 270, PORT_W = 270;
+var W = LAND_W, H = LAND_H;
 var canvas, ctx;
 var frame = 0;
+
+function isPortrait() { return H > W; }
 
 // ---- canvas & scaling ------------------------------------------------------
 
 function setupCanvas() {
   canvas = document.getElementById('game');
-  canvas.width = W; canvas.height = H;
   ctx = canvas.getContext('2d');
-  ctx.imageSmoothingEnabled = false;
   resize();
   window.addEventListener('resize', resize);
   Input.initTouch(canvas, function (cx, cy) {
@@ -25,18 +31,57 @@ function setupCanvas() {
 }
 
 function resize() {
-  // In GB (portrait) mode fit into the #screen box (the area above the control
-  // deck). Otherwise measure the window — on desktop #screen shrink-wraps to
-  // the canvas, so measuring it would be circular and pin the game to 480x270.
-  var gb = document.body.classList.contains('gb');
-  var host = document.getElementById('screen');
-  var ww = (gb && host) ? host.clientWidth : window.innerWidth;
-  var wh = (gb && host) ? host.clientHeight : window.innerHeight;
-  if (!ww || !wh) { ww = window.innerWidth; wh = window.innerHeight; }
-  var s = Math.min(ww / W, wh / H);
-  if (!isFinite(s) || s <= 0.1) s = 1;
+  var vw = window.innerWidth, vh = window.innerHeight;
+  if (!vw || !vh) { vw = LAND_W; vh = LAND_H; }
+  if (vh > vw) {
+    // portrait: match the device aspect so the game fills the screen; clamp so
+    // an unusually tall/short viewport still lays out sanely
+    W = PORT_W;
+    H = Math.round(PORT_W * vh / vw);
+    if (H < 440) H = 440; else if (H > 640) H = 640;
+  } else {
+    W = LAND_W; H = LAND_H;
+  }
+  if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+  ctx.imageSmoothingEnabled = false; // resetting canvas.width clears this
+  if (window.Backgrounds) Backgrounds.setSize(W, H); // wash fills the real canvas
+  syncRaiseBtn();
+  var s = Math.min(vw / W, vh / H);
+  if (!isFinite(s) || s <= 0.05) s = 1;
   canvas.style.width = Math.round(W * s) + 'px';
   canvas.style.height = Math.round(H * s) + 'px';
+}
+
+// Per-frame board placement — depends on orientation, so a rotation mid-match
+// re-flows instantly. Sets g.bo (solo/puzzle) or g.bo1/g.bo2 + g.centerX (vs).
+function layoutGame(g) {
+  var bw = Render.BOARD_W;
+  if (g.kind === 'vs' || g.kind === 'net') {
+    if (isPortrait()) {
+      g.bo1 = { x: 18, y: 118 };
+      g.bo2 = { x: W - 18 - bw, y: 118 };
+    } else {
+      g.bo1 = { x: 104, y: 44 };
+      g.bo2 = { x: W - 104 - bw, y: 44 };
+    }
+    g.centerX = Math.round(W / 2);
+  } else {
+    g.bo = isPortrait()
+      ? { x: Math.round((W - bw) / 2), y: 104 }
+      : { x: 56, y: 34 };
+  }
+}
+
+// A framed backing so each board reads as its own space against the ambient
+// background instead of blending in — tinted with the player's accent color.
+function drawBoardFrame(x, y, col) {
+  var bw = Render.BOARD_W, bh = Render.BOARD_H + Render.CELL; // +preview row
+  ctx.fillStyle = 'rgba(8,8,22,0.55)';
+  ctx.fillRect(x - 5, y - 5, bw + 10, bh + 10);
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x - 4, y - 4, bw + 8, bh + 8);
+  ctx.lineWidth = 1;
 }
 
 // ---- tiny helpers -----------------------------------------------------------
@@ -225,21 +270,24 @@ var titleScreen = {
   },
   draw: function () {
     drawBgPanels();
+    var port = isPortrait();
+    var logoY = port ? Math.round(H * 0.24) : 60;
     // logo: letters bob in a wave, flanked by bobbing panels
-    drawWaveText('PANEL', W / 2, 60, '#f27d9d', 4);
-    drawWaveText('POP', W / 2, 96, COL_ACC, 4);
+    drawWaveText('PANEL', W / 2, logoY, '#f27d9d', 4);
+    drawWaveText('POP', W / 2, logoY + 36, COL_ACC, 4);
     var bobL = Math.round(Math.sin(frame / 14) * 3);
     var bobR = Math.round(Math.sin(frame / 14 + 1.5) * 3);
-    ctx.drawImage(Sprites.panels[0].normal, W / 2 - 122, 74 + bobL);
-    ctx.drawImage(Sprites.panels[3].normal, W / 2 + 106, 74 + bobR);
+    ctx.drawImage(Sprites.panels[0].normal, W / 2 - 122, logoY + 14 + bobL);
+    ctx.drawImage(Sprites.panels[3].normal, W / 2 + 106, logoY + 14 + bobR);
+    var midY = port ? Math.round(H * 0.56) : 160;
     ctx.fillStyle = '#5a5a8c';
-    ctx.fillRect(W / 2 - 90, 134, 180, 1);
+    ctx.fillRect(W / 2 - 90, midY - 26, 180, 1);
     ctx.globalAlpha = 0.55 + 0.45 * Math.sin(frame / 14);
-    ctext('PRESS ENTER', W / 2, 160, COL_TEXT);
+    ctext(port ? 'TAP OR PRESS A' : 'PRESS ENTER', W / 2, midY, COL_TEXT);
     ctx.globalAlpha = 1;
-    ctext('SWAP - MATCH 3 - CHAIN!', W / 2, 190, COL_DIM);
+    ctext('SWAP - MATCH 3 - CHAIN!', W / 2, midY + 30, COL_DIM);
     ctext('V' + APP_VERSION, W / 2, H - 24, COL_DIM);
-    ctext('VOLUME - / +   MUSIC M', W / 2, H - 12, COL_DIM);
+    ctext(port ? 'A OK   B BACK   START PAUSE' : 'VOLUME - / +   MUSIC M', W / 2, H - 12, COL_DIM);
   }
 };
 
@@ -310,20 +358,35 @@ var menuScreen = {
   },
   draw: function () {
     drawBgPanels();
-    ctext('PANEL POP', W / 2, 26, COL_ACC, 2);
+    var port = isPortrait();
+    ctext('PANEL POP', W / 2, port ? 22 : 26, COL_ACC, 2);
+    // list — a left column in landscape, centered in portrait (with the
+    // records moved below it instead of off to the right)
+    this.list.x = port ? Math.round(W / 2 - 58) : 60;
+    this.list.y = port ? 62 : 70;
     this.list.draw();
-    // records box
-    var x = 280, y = 74;
-    text('RECORDS', x, y, COL_DIM);
-    text('ENDLESS ' + pad(Save.get('hiEndless'), 7), x, y + 14);
-    text('SCORE ATK ' + pad(Save.get('hiScore'), 7), x, y + 26);
-    text('BEST CHAIN x' + Save.get('bestChainEndless'), x, y + 38);
-    var pc = 0; var pcs = Save.get('puzzleCleared');
-    for (var k in pcs) if (pcs[k]) pc++;
-    text('PUZZLES ' + pc + '/30', x, y + 50);
-    text('STORY ' + (Save.get('storyBeaten') ? 'CLEAR!' : (Save.get('storyStage') + '/8')), x, y + 62,
-      Save.get('storyBeaten') ? COL_ACC : COL_TEXT);
-    ctext('ARROWS/WASD MOVE   ENTER OK   ESC BACK', W / 2, H - 12, COL_DIM);
+    var pc = 0, pcs = Save.get('puzzleCleared'), k;
+    for (k in pcs) if (pcs[k]) pc++;
+    var story = Save.get('storyBeaten') ? 'CLEAR!' : (Save.get('storyStage') + '/8');
+    if (port) {
+      var rx = 20, ry = this.list.y + this.list.items.length * this.list.spacing + 14;
+      text('RECORDS', rx, ry, COL_DIM);
+      text('ENDLESS   ' + pad(Save.get('hiEndless'), 7), rx, ry + 13);
+      text('SCORE ATK ' + pad(Save.get('hiScore'), 7), rx, ry + 24);
+      text('BEST CHAIN x' + Save.get('bestChainEndless'), rx, ry + 35);
+      text('PUZZLES ' + pc + '/30   STORY ' + story, rx, ry + 46,
+        Save.get('storyBeaten') ? COL_ACC : COL_TEXT);
+    } else {
+      var x = 280, y = 74;
+      text('RECORDS', x, y, COL_DIM);
+      text('ENDLESS ' + pad(Save.get('hiEndless'), 7), x, y + 14);
+      text('SCORE ATK ' + pad(Save.get('hiScore'), 7), x, y + 26);
+      text('BEST CHAIN x' + Save.get('bestChainEndless'), x, y + 38);
+      text('PUZZLES ' + pc + '/30', x, y + 50);
+      text('STORY ' + story, x, y + 62, Save.get('storyBeaten') ? COL_ACC : COL_TEXT);
+    }
+    ctext(port ? 'D-PAD MOVE   A OK   B BACK' : 'ARROWS/WASD MOVE   ENTER OK   ESC BACK',
+      W / 2, H - 12, COL_DIM);
   }
 };
 
@@ -750,6 +813,8 @@ var vsSelectScreen = {
     drawBgPanels();
     ctext('VS CPU', W / 2, 30, COL_ACC, 2);
     ctext('CHOOSE DIFFICULTY', W / 2, 52, COL_DIM);
+    this.list.x = isPortrait() ? Math.round(W / 2 - 52) : 200;
+    this.list.y = isPortrait() ? 76 : 70;
     var labels = [];
     var names = ['ROOKIE', 'EASY', 'NORMAL', 'SPICY', 'HARD', 'EXPERT', 'MASTER', 'INSANE'];
     for (var i = 0; i < 8; i++) labels.push((i + 1) + ' - ' + names[i]);
@@ -761,6 +826,12 @@ var vsSelectScreen = {
 
 var puzzleSelectScreen = {
   idx: 0,
+  grid: function () {
+    // 6 columns of level tiles; tighter pitch in portrait so they fit 270 wide
+    return isPortrait()
+      ? { x0: 13, cw: 41, y0: 72, rh: 32 }
+      : { x0: 118, cw: 42, y0: 60, rh: 32 };
+  },
   update: function () {
     var q = Input.drainMenu();
     for (var i = 0; i < q.length; i++) {
@@ -772,12 +843,14 @@ var puzzleSelectScreen = {
       if (ev === 'down' && this.idx < 24) { this.idx += 6; Audio2.sfx.move(); }
       if (ev === 'ok') { Audio2.sfx.select(); startPuzzle(this.idx); return; }
     }
+    var g = this.grid();
     var taps = Input.taps;
     for (var t = 0; t < taps.length; t++) {
       var p = taps[t];
-      var c = Math.floor((p.x - 118) / 42), r = Math.floor((p.y - 60) / 32);
+      var c = Math.floor((p.x - g.x0) / g.cw), r = Math.floor((p.y - g.y0) / g.rh);
       if (c >= 0 && c < 6 && r >= 0 && r < 5) {
         var ti = r * 6 + c;
+        if (ti >= 30) continue;
         if (this.idx === ti) { Audio2.sfx.select(); startPuzzle(ti); return; }
         this.idx = ti; Audio2.sfx.move();
       }
@@ -786,10 +859,11 @@ var puzzleSelectScreen = {
   draw: function () {
     drawBgPanels();
     ctext('PUZZLE', W / 2, 22, COL_ACC, 2);
+    var g = this.grid();
     var cleared = Save.get('puzzleCleared');
     for (var i = 0; i < 30; i++) {
       var c = i % 6, r = Math.floor(i / 6);
-      var x = 118 + c * 42, y = 60 + r * 32;
+      var x = g.x0 + c * g.cw, y = g.y0 + r * g.rh;
       var sel = i === this.idx;
       ctx.fillStyle = sel ? '#f2ca4e' : (cleared[i] ? '#2c5c38' : '#22223c');
       ctx.fillRect(x, y, 34, 24);
@@ -800,7 +874,7 @@ var puzzleSelectScreen = {
     }
     ctext(Puzzle.LEVELS[this.idx].name + ' - ' + Puzzle.LEVELS[this.idx].sol.length + ' MOVES',
       W / 2, H - 26, COL_TEXT);
-    ctext('ESC BACK', W / 2, H - 12, COL_DIM);
+    ctext(isPortrait() ? 'B BACK' : 'ESC BACK', W / 2, H - 12, COL_DIM);
   }
 };
 
@@ -1038,9 +1112,17 @@ function dragSwapLegal(board, x, y) {
   return !(a.state === Engine.EMPTY && b.state === Engine.EMPTY);
 }
 
-// RAISE on-screen button zone (solo/puzzle-free modes)
-var raiseBtn = { x: W - 66, y: H - 40, w: 52, h: 26 };
+// is the floating on-screen control deck showing (touch + portrait)?
+function deckActive() {
+  return !!(window.Touchpad && Touchpad.deckActive && Touchpad.deckActive());
+}
+
+// RAISE on-screen button zone (landscape / desktop fallback; the portrait deck
+// carries its own RAISE). Recomputed from W/H each use since they now vary.
+var raiseBtn = { x: 0, y: 0, w: 52, h: 26 };
+function syncRaiseBtn() { raiseBtn.x = W - 66; raiseBtn.y = H - 40; }
 function raiseHeld() {
+  if (deckActive()) return false; // the floating deck's RAISE feeds the pad
   var pts = Input.heldPoints();
   for (var i = 0; i < pts.length; i++) {
     var p = pts[i];
@@ -1055,6 +1137,7 @@ function raiseHeld() {
 var gameScreen = {
   update: function () {
     var g = game;
+    layoutGame(g); // keep board placement current (handles rotation mid-match)
 
     // cursor glide + ambient background advance at sim rate on every path
     // (incl. pause/countdown/hitstop) so they never stall or vary by refresh
@@ -1301,74 +1384,98 @@ var gameScreen = {
 
   draw: function () {
     var g = game;
+    layoutGame(g);
+    var port = isPortrait();
+    var HALF = Render.BOARD_W / 2;
     // layered environment behind everything
     Backgrounds.draw(ctx, g.theme, frame);
 
     if (g.kind === 'solo' || g.kind === 'puzzle') {
       var b = g.board;
       Backgrounds.halo(ctx, g.bo.x, g.bo.y, Render.BOARD_W, Render.BOARD_H);
+      drawBoardFrame(g.bo.x, g.bo.y, COL_BLUE);
       Render.drawBoard(ctx, b, g.bo.x, g.bo.y, {});
-      var hx = g.bo.x + 120;
       if (g.kind === 'solo') {
-        drawSoloHud(b, hx, 40, g.mode, g.timer, g.dispScore);
-        // raise button (touch)
+        if (port) drawSoloHudStrip(b, g);
+        else drawSoloHud(b, g.bo.x + 120, 40, g.mode, g.timer, g.dispScore);
+      } else {
+        if (port) drawPuzzleHudStrip(g);
+        else {
+          var lv = Puzzle.LEVELS[g.idx], hx = g.bo.x + 120;
+          text('PUZZLE ' + (g.idx + 1), hx, 40, COL_DIM);
+          text(lv.name, hx, 50, COL_TEXT);
+          text('MOVES LEFT', hx, 70, COL_DIM);
+          text('' + Math.max(0, g.board.movesLeft), hx, 80,
+            g.board.movesLeft > 0 ? COL_ACC : COL_BAD, g.movePunch > 5 ? 3 : 2);
+          text('ESC: PAUSE/RETRY', hx, 104, COL_DIM);
+          if (g.board.maxChain >= 2) text('CHAIN x' + g.board.maxChain + '!', hx, 122, COL_ACC);
+        }
+      }
+      // on-canvas RAISE button only when there's no floating deck (desktop /
+      // landscape mobile) — the phone deck carries its own RAISE
+      if (g.kind === 'solo' && !deckActive()) {
         ctx.fillStyle = '#22223c';
         ctx.fillRect(raiseBtn.x, raiseBtn.y, raiseBtn.w, raiseBtn.h);
         text('RAISE', raiseBtn.x + 8, raiseBtn.y + 9, COL_DIM);
-      } else {
-        var lv = Puzzle.LEVELS[g.idx];
-        text('PUZZLE ' + (g.idx + 1), hx, 40, COL_DIM);
-        text(lv.name, hx, 50, COL_TEXT);
-        text('MOVES LEFT', hx, 70, COL_DIM);
-        text('' + Math.max(0, g.board.movesLeft), hx, 80,
-          g.board.movesLeft > 0 ? COL_ACC : COL_BAD, g.movePunch > 5 ? 3 : 2);
-        text('ESC: PAUSE/RETRY', hx, 104, COL_DIM);
-        if (g.board.maxChain >= 2) text('CHAIN x' + g.board.maxChain + '!', hx, 122, COL_ACC);
       }
       if (g.over) {
         var msg = g.kind === 'puzzle'
           ? (g.won ? 'CLEAR!' : 'OUT OF MOVES')
           : (g.won ? 'TIME UP!' : 'GAME OVER');
-        ctext(msg, g.bo.x + 48, g.bo.y + 80, g.won ? COL_ACC : COL_BAD, stampScale(g.overT));
+        ctext(msg, g.bo.x + HALF, g.bo.y + 80, g.won ? COL_ACC : COL_BAD, stampScale(g.overT));
       }
     } else {
-      // vs
+      // vs — each board framed in its player's color so they read as separate
+      // spaces (you = green, rival = red), side by side with a clear gutter
       Backgrounds.halo(ctx, g.bo1.x, g.bo1.y, Render.BOARD_W, Render.BOARD_H);
       Backgrounds.halo(ctx, g.bo2.x, g.bo2.y, Render.BOARD_W, Render.BOARD_H);
+      drawBoardFrame(g.bo1.x, g.bo1.y, COL_OK);
+      drawBoardFrame(g.bo2.x, g.bo2.y, COL_BAD);
       Render.drawBoard(ctx, g.b1, g.bo1.x, g.bo1.y, {});
       Render.drawBoard(ctx, g.b2, g.bo2.x, g.bo2.y, { showCursor: true });
-      // center HUD
-      var cxm = W / 2;
+      var cxm = g.centerX;
       var leftName = g.kind === 'net' ? currentTag() : (g.cpu ? 'YOU' : 'P1');
       var rightName = g.kind === 'net' ? (g.oppTag || '???')
         : (g.cpu ? (g.storyStage !== null ? Story.STAGES[g.storyStage].name : 'CPU LV' + g.tier) : 'P2');
-      ctext(leftName, g.bo1.x + 48, g.bo1.y - 14, COL_BLUE);
-      ctext(rightName, g.bo2.x + 48, g.bo2.y - 14, COL_BAD);
-      ctext('SCORE', cxm, 60, COL_DIM);
-      ctext(pad(g.dispScore, 7), cxm, 70);
-      ctext('CHAIN x' + g.b1.maxChain, cxm, 86, g.b1.maxChain >= 3 ? COL_ACC : COL_DIM);
-      // online status: waiting for the peer's inputs, or a desync
-      if (g.kind === 'net' && !g.over) {
-        if (g.desync) ctext('DESYNC', cxm, 108, COL_BAD);
-        else if (g.waiting && (frame >> 3) % 2) ctext('WAITING...', cxm, 108, COL_DIM);
+      var nameY = g.bo1.y - (port ? 16 : 14);
+      var garbY = g.bo1.y - (port ? 28 : 26);
+      ctext(leftName, g.bo1.x + HALF, nameY, COL_OK);
+      ctext(rightName, g.bo2.x + HALF, nameY, COL_BAD);
+      // score / chain / status: a top band in portrait (thin gutter), a center
+      // column in landscape (wide gutter)
+      if (port) {
+        ctext('SCORE ' + pad(g.dispScore, 7), cxm, 26, COL_TEXT);
+        ctext('CHAIN x' + g.b1.maxChain, cxm, 40, g.b1.maxChain >= 3 ? COL_ACC : COL_DIM);
+        if (g.kind === 'net' && !g.over) {
+          if (g.desync) ctext('DESYNC', cxm, 54, COL_BAD);
+          else if (g.waiting && (frame >> 3) % 2) ctext('WAITING...', cxm, 54, COL_DIM);
+        }
+      } else {
+        ctext('SCORE', cxm, 60, COL_DIM);
+        ctext(pad(g.dispScore, 7), cxm, 70);
+        ctext('CHAIN x' + g.b1.maxChain, cxm, 86, g.b1.maxChain >= 3 ? COL_ACC : COL_DIM);
+        if (g.kind === 'net' && !g.over) {
+          if (g.desync) ctext('DESYNC', cxm, 108, COL_BAD);
+          else if (g.waiting && (frame >> 3) % 2) ctext('WAITING...', cxm, 108, COL_DIM);
+        }
       }
-      // pending garbage warning
+      // pending garbage warning above each board
       var q1 = 0, q2 = 0, i;
       for (i = 0; i < g.b1.garbageQueue.length; i++) q1 += g.b1.garbageQueue[i].w * g.b1.garbageQueue[i].h;
       for (i = 0; i < g.b2.garbageQueue.length; i++) q2 += g.b2.garbageQueue[i].w * g.b2.garbageQueue[i].h;
-      if (q1) ctext('! ' + q1, g.bo1.x + 48, g.bo1.y - 26, COL_BAD);
-      if (q2) ctext('! ' + q2, g.bo2.x + 48, g.bo2.y - 26, COL_BAD);
+      if (q1) ctext('! ' + q1, g.bo1.x + HALF, garbY, COL_BAD);
+      if (q2) ctext('! ' + q2, g.bo2.x + HALF, garbY, COL_BAD);
 
       if (g.over) {
         if (g.kind === 'net' && g.winner === 0) {
-          ctext(g.desync ? 'DESYNC' : 'DRAW', cxm, 130, COL_BAD, 2);
+          ctext(g.desync ? 'DESYNC' : 'DRAW', cxm, port ? g.bo1.y + 90 : 130, COL_BAD, 2);
         } else {
           var wbo = g.winner === 1 ? g.bo1 : g.bo2;
           var lbo = g.winner === 1 ? g.bo2 : g.bo1;
-          ctext('WIN!', wbo.x + 48, wbo.y + 80, COL_ACC, stampScale(g.overT));
-          ctext('LOSE', lbo.x + 48, lbo.y + 80, COL_BAD, stampScale(g.overT));
+          ctext('WIN!', wbo.x + HALF, wbo.y + 80, COL_ACC, stampScale(g.overT));
+          ctext('LOSE', lbo.x + HALF, lbo.y + 80, COL_BAD, stampScale(g.overT));
         }
-        if (g.kind === 'net' && g.oppLeft) ctext('OPPONENT LEFT', cxm, 150, COL_DIM);
+        if (g.kind === 'net' && g.oppLeft) ctext('OPPONENT LEFT', cxm, port ? g.bo1.y + 110 : 150, COL_DIM);
       }
     }
 
@@ -1387,19 +1494,52 @@ var gameScreen = {
       var boards = (g.kind === 'vs' || g.kind === 'net') ? [g.bo1, g.bo2] : [g.bo];
       for (var bi = 0; bi < boards.length; bi++) {
         var bb = boards[bi];
-        ctext(n, bb.x + 48 + 1, bb.y + 78 + 1, '#101020', cs);
-        ctext(n, bb.x + 48, bb.y + 78, n === 'GO!' ? COL_OK : COL_ACC, cs);
+        ctext(n, bb.x + HALF + 1, bb.y + 78 + 1, '#101020', cs);
+        ctext(n, bb.x + HALF, bb.y + 78, n === 'GO!' ? COL_OK : COL_ACC, cs);
       }
     }
 
     if (g.paused) {
       ctx.fillStyle = 'rgba(8,8,20,0.8)';
       ctx.fillRect(0, 0, W, H);
-      ctext('PAUSED', W / 2, 70, COL_ACC, 2);
+      ctext('PAUSED', W / 2, port ? Math.round(H * 0.30) : 70, COL_ACC, 2);
       g.pauseList.draw();
     }
   }
 };
+
+// right-aligned text (portrait HUD strips)
+function rtext(t, xr, y, col, s) {
+  Font.drawText(ctx, t, xr - Font.textWidth(t, s || 1), y, col || COL_TEXT, s || 1);
+}
+
+// portrait solo HUD: a thin strip across the top (score | time | speed/chain)
+function drawSoloHudStrip(b, g) {
+  var y = 12;
+  text('SCORE', 8, y, COL_DIM);
+  text(pad(g.dispScore, 7), 8, y + 9,
+    g.dispScore < b.score ? COL_ACC : COL_TEXT);
+  var tv = g.mode === 'score' ? mmss(g.timer) : mmss(b.frame);
+  ctext('TIME', W / 2, y, COL_DIM);
+  ctext(tv, W / 2, y + 9, (g.mode === 'score' && g.timer < 600) ? COL_BAD : COL_TEXT);
+  rtext('SPD ' + b.level, W - 8, y, COL_DIM);
+  rtext('CHAIN x' + b.maxChain, W - 8, y + 9, b.maxChain >= 4 ? COL_ACC : COL_TEXT);
+  if (b.stopTimer > 0) {
+    ctx.fillStyle = COL_BLUE;
+    ctx.fillRect(8, y + 20, Math.min(W - 16, b.stopTimer / 10 * 3), 3);
+  }
+}
+
+// portrait puzzle HUD strip (level | moves | chain)
+function drawPuzzleHudStrip(g) {
+  var lv = Puzzle.LEVELS[g.idx], y = 12;
+  text('PUZZLE ' + (g.idx + 1), 8, y, COL_DIM);
+  text(lv.name, 8, y + 9, COL_TEXT);
+  ctext('MOVES', W / 2, y, COL_DIM);
+  ctext('' + Math.max(0, g.board.movesLeft), W / 2, y + 8,
+    g.board.movesLeft > 0 ? COL_ACC : COL_BAD, g.movePunch > 5 ? 2 : 1);
+  if (g.board.maxChain >= 2) rtext('CHAIN x' + g.board.maxChain, W - 8, y, COL_ACC);
+}
 
 // big banner text punches in oversized then settles
 function stampScale(t) { return t < 5 ? 4 : (t < 10 ? 3 : 2); }
@@ -1410,7 +1550,8 @@ function togglePause() {
   Audio2.sfx.select();
   Input.drainMenu(); // flush the Esc that toggled us (it also queues 'back')
   if (g.paused) {
-    g.pauseList = new MenuList(['CONTINUE', 'RESTART', 'QUIT'], W / 2 - 30, 110);
+    var py = isPortrait() ? Math.round(H * 0.30) + 30 : 110;
+    g.pauseList = new MenuList(['CONTINUE', 'RESTART', 'QUIT'], W / 2 - 30, py);
     Audio2.stopMusic();
   } else {
     Audio2.playSong('play');
