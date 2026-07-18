@@ -11,8 +11,8 @@
 // bundled assets. tool/gen_manifests.js keeps ota/web.json in sync.
 library;
 
-const String kBundledWebVersion = '0.6.0'; // == js/main.js APP_VERSION at build
-const String kNativeVersion = '0.6.0'; // == pubspec version (shell build)
+const String kBundledWebVersion = '0.8.0'; // == js/main.js APP_VERSION at build
+const String kNativeVersion = '0.8.1'; // == pubspec version (shell build)
 
 // GitHub Pages serves the repo root, so the game and both manifests live at:
 const String kOtaBase = 'https://userpick05.github.io/panelpop';

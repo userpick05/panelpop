@@ -72,6 +72,33 @@ changes.
 ship a game update: edit the JS, bump `APP_VERSION`, run `gen_manifests`, and
 push — Pages serves the new bundle and installs pull it in.
 
+## Online (leaderboards + versus)
+
+Online features run on a free Firebase Realtime Database and are **fail-silent**:
+with no config (or offline) the game plays exactly as before, leaderboards show
+your local best, and Vs. Online is hidden. To enable them:
+
+1. Create a project at <https://console.firebase.google.com> (Google account,
+   free "Spark" plan is enough). Skip Analytics.
+2. In the project: **Build → Realtime Database → Create Database**. Pick a
+   region; start in **locked mode** (the rules below replace it).
+3. **Project settings → General → Your apps → Web app** (`</>`). Register it;
+   copy the `firebaseConfig` object. Paste it into `js/firebase-config.js`
+   (replace `window.FIREBASE_CONFIG = null;` with `window.FIREBASE_CONFIG = {…}`).
+   The web config is not secret — security is the database rules, not hiding it.
+4. Deploy the security rules (this repo ships `database.rules.json` +
+   `firebase.json`): install the CLI (`npm i -g firebase-tools`), then
+   `firebase login` and `firebase deploy --only database`. The rules make
+   scores append-only + shape-validated and index them for the leaderboard
+   query; rooms are ephemeral relay nodes.
+5. Rebuild/redeploy the web bundle (and APK) — done. Set your 4-letter name in
+   **Online → Set Name**, then Host/Join a room by code.
+
+The versus netcode is delay-based **lockstep** on the deterministic engine
+(`js/net.js` relays batched inputs; `tool/test_lockstep.js` proves two peers
+stay bit-identical). Real cross-device play can only be confirmed on two
+devices with the config in place.
+
 ## Development
 
 - Engine (`js/engine.js`) is pure logic, loadable in Node via a `module.exports` guard.

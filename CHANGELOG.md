@@ -1,5 +1,53 @@
 # Changelog
 
+## v0.8.1 — 2026-07-17 (branch feature-v0.8-portrait)
+
+Fix: the in-app APK update could sit on "Downloading update…" forever with no
+visible progress (native shell only — the game itself is unchanged).
+
+- **Real download feedback** — a modal progress dialog with a bar and live
+  `MB / MB (%)`, updated on every chunk. Previously progress was only shown
+  when the server reported a total size; GitHub's redirected asset sometimes
+  reports it as unknown, so the old snackbar sat frozen at 0% for the whole
+  ~45 MB download and looked hung.
+- **Stall timeout** — if the connection goes idle for 30 s mid-download it now
+  aborts with "Download stalled — check your connection" and a **RETRY**
+  action, instead of hanging indefinitely.
+- Also: follows redirects explicitly, clears any stale partial download before
+  starting, and cleans up the partial file on failure.
+
+## v0.8.0 — 2026-07-13 (branch feature-v0.8-portrait)
+
+Portrait, Game-Boy-style controls on phones.
+
+- **Portrait orientation** — the Android app is now portrait; the game screen
+  sits at the top with a control deck below (web layout switches to a
+  `screen + deck` column on touch devices; desktop still centers the canvas).
+- **On-screen D-pad + A / B / RAISE buttons, on every screen** — big, always
+  visible, so you drive the menus and the game with the pad instead of poking
+  small text. D-pad = move cursor / navigate menus; A = swap / confirm;
+  B = back / pause; RAISE = hold to raise. Feeds the same input pipeline as the
+  keyboard, so nothing downstream changed.
+
+## v0.7.0 — 2026-07-13 (branch feature-v0.7-online)
+
+Online — leaderboards + real-time versus, all fail-silent (offline or before
+a Firebase project is configured, the game runs exactly as before).
+
+- **Online leaderboards** — global top-10 for Endless and Score Attack. Set a
+  4-letter pilot name; scores submit on game over. Falls back to your local
+  best when offline.
+- **Online Versus** — real-time head-to-head over **room codes**: HOST gets a
+  code to share, JOIN enters it. Runs delay-based **lockstep** on the
+  deterministic engine (both sides simulate both boards from one seed +
+  exchanged inputs, so the garbage stays perfectly in sync), with board-hash
+  **desync detection**. **Rematch** in the same room after a match; forfeit on
+  quit. Powered by a Firebase relay (no dedicated server).
+- Firebase config lives in `js/firebase-config.js` (null until you create a
+  project — see README). New: `js/net.js`, `tool/gen_manifests.js` already
+  syncs the new files; `tool/test_lockstep.js` proves two peers stay
+  bit-identical over 1500 frames.
+
 ## v0.6.0 — 2026-07-12 (branch feature-v0.5-ota)
 
 - **Virtual on-screen controls for phones.** A translucent thumb **D-pad**

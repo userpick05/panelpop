@@ -14,7 +14,8 @@ var defaults = {
   puzzleCleared: {},     // { levelIndex: true }
   storyStage: 0,         // next stage to play (0-based)
   storyBeaten: false,
-  vsWins: 0
+  vsWins: 0,
+  pilotTag: ''           // 4-char name for online leaderboards / versus
 };
 
 var data = null;

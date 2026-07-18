@@ -3,7 +3,7 @@
 
 (function () {
 
-var APP_VERSION = '0.6.0';
+var APP_VERSION = '0.8.0';
 
 var W = 480, H = 270;
 var canvas, ctx;
@@ -25,13 +25,16 @@ function setupCanvas() {
 }
 
 function resize() {
-  var ww = window.innerWidth, wh = window.innerHeight;
+  // In GB (portrait) mode fit into the #screen box (the area above the control
+  // deck). Otherwise measure the window — on desktop #screen shrink-wraps to
+  // the canvas, so measuring it would be circular and pin the game to 480x270.
+  var gb = document.body.classList.contains('gb');
+  var host = document.getElementById('screen');
+  var ww = (gb && host) ? host.clientWidth : window.innerWidth;
+  var wh = (gb && host) ? host.clientHeight : window.innerHeight;
+  if (!ww || !wh) { ww = window.innerWidth; wh = window.innerHeight; }
   var s = Math.min(ww / W, wh / H);
-  if (!isFinite(s) || s <= 0.1) s = 1; // window not measurable yet
-  // Always scale to the largest aspect-preserving fit so the game fills the
-  // screen. (image-rendering:pixelated keeps it crisp at fractional scale;
-  // an earlier integer-snap floored phones whose fit was ~1.5-1.9 down to 1x,
-  // rendering the board tiny in the middle of the display.)
+  if (!isFinite(s) || s <= 0.1) s = 1;
   canvas.style.width = Math.round(W * s) + 'px';
   canvas.style.height = Math.round(H * s) + 'px';
 }
@@ -56,7 +59,11 @@ function showToast(m) { toast.msg = m; toast.t = 90; }
 
 var screen = null;
 var fadeT = 0; // brief fade-in on every screen change
-function go(s) { screen = s; fadeT = 8; if (s.enter) s.enter(); }
+function go(s) {
+  screen = s; fadeT = 8;
+  if (window.Input) Input.padClear(); // don't carry a held D-pad dir across screens
+  if (s.enter) s.enter();
+}
 
 // dev/debug handle (harmless in production; used by automated verification)
 window.__pp = {
@@ -275,8 +282,8 @@ var menuScreen = {
   enter: function () {
     Audio2.playSong('menu');
     this.list = new MenuList(
-      ['ENDLESS', 'SCORE ATTACK', 'VS CPU', '2 PLAYERS', 'PUZZLE', 'STORY', 'HOW TO PLAY'],
-      60, 74);
+      ['ENDLESS', 'SCORE ATTACK', 'VS CPU', '2 PLAYERS', 'PUZZLE', 'STORY', 'ONLINE', 'HOW TO PLAY'],
+      60, 70, 13);
   },
   update: function () {
     var q = Input.drainMenu();
@@ -298,6 +305,7 @@ var menuScreen = {
     else if (pick === '2 PLAYERS') startVs2P();
     else if (pick === 'PUZZLE') go(puzzleSelectScreen);
     else if (pick === 'STORY') go(storyIntroScreen);
+    else if (pick === 'ONLINE') go(onlineScreen);
     else if (pick === 'HOW TO PLAY') go(howToScreen);
   },
   draw: function () {
@@ -355,6 +363,367 @@ var howToScreen = {
     ctext('ENTER TO RETURN', W / 2, H - 14, COL_DIM);
   }
 };
+
+// ---- ONLINE ------------------------------------------------------------------
+
+function randomTag() {
+  var A = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  var s = '';
+  for (var i = 0; i < 4; i++) s += A[Math.floor(Math.random() * A.length)];
+  return s;
+}
+function currentTag() {
+  var t = Save.get('pilotTag');
+  if (!t) { t = randomTag(); Save.set('pilotTag', t); }
+  return t;
+}
+
+// reusable 4-slot character editor (name + join code)
+var editorCtx = null;
+function openEditor(title, initial, len, onDone, onBack) {
+  var A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  var chars = [];
+  initial = (initial || '').toUpperCase();
+  for (var i = 0; i < len; i++) {
+    var idx = A.indexOf(initial[i] || 'A');
+    chars.push(idx < 0 ? 0 : idx);
+  }
+  editorCtx = { title: title, A: A, chars: chars, len: len, slot: 0, onDone: onDone, onBack: onBack };
+  go(editorScreen);
+}
+function editorString() {
+  var s = '';
+  for (var i = 0; i < editorCtx.chars.length; i++) s += editorCtx.A[editorCtx.chars[i]];
+  return s;
+}
+var editorScreen = {
+  update: function () {
+    var c = editorCtx, q = Input.drainMenu(), i;
+    for (i = 0; i < q.length; i++) {
+      var e = q[i];
+      if (e === 'back') { Audio2.sfx.back(); c.onBack(); return; }
+      else if (e === 'left') { c.slot = (c.slot + c.len - 1) % c.len; Audio2.sfx.move(); }
+      else if (e === 'right') { c.slot = (c.slot + 1) % c.len; Audio2.sfx.move(); }
+      else if (e === 'up') { c.chars[c.slot] = (c.chars[c.slot] + 1) % c.A.length; Audio2.sfx.move(); }
+      else if (e === 'down') { c.chars[c.slot] = (c.chars[c.slot] + c.A.length - 1) % c.A.length; Audio2.sfx.move(); }
+      else if (e === 'ok') { Audio2.sfx.select(); c.onDone(editorString()); return; }
+    }
+    var taps = Input.taps, slotW = 30, x0 = W / 2 - (c.len * slotW) / 2;
+    for (i = 0; i < taps.length; i++) {
+      var p = taps[i];
+      if (p.y > H - 42 && Math.abs(p.x - W / 2) < 34) { Audio2.sfx.select(); c.onDone(editorString()); return; }
+      var sx = Math.floor((p.x - x0) / slotW);
+      if (sx >= 0 && sx < c.len) {
+        c.slot = sx;
+        if (p.y < 128) c.chars[sx] = (c.chars[sx] + 1) % c.A.length;
+        else if (p.y > 148) c.chars[sx] = (c.chars[sx] + c.A.length - 1) % c.A.length;
+        Audio2.sfx.move();
+      }
+    }
+  },
+  draw: function () {
+    drawBgPanels();
+    var c = editorCtx;
+    ctext(c.title, W / 2, 34, COL_ACC, 2);
+    var slotW = 30, x0 = W / 2 - (c.len * slotW) / 2;
+    for (var i = 0; i < c.len; i++) {
+      var x = x0 + i * slotW + slotW / 2, sel = i === c.slot;
+      if (sel) {
+        ctx.fillStyle = 'rgba(242,202,78,0.14)'; ctx.fillRect(x - 13, 126, 26, 22);
+        ctext('^', x, 116, COL_ACC); ctext('v', x, 152, COL_ACC);
+      }
+      ctext(c.A[c.chars[i]], x, 130, sel ? COL_ACC : COL_TEXT, 2);
+    }
+    ctx.fillStyle = '#22223c'; ctx.fillRect(W / 2 - 34, H - 42, 68, 22);
+    ctext('DONE', W / 2, H - 36, COL_ACC);
+    ctext('UP/DOWN LETTER   LEFT/RIGHT SLOT', W / 2, H - 14, COL_DIM);
+  }
+};
+
+var onlineScreen = {
+  list: null,
+  enter: function () { this.list = new MenuList(['LEADERBOARDS', 'VS ONLINE', 'SET NAME'], W / 2 - 44, 92, 16); },
+  update: function () {
+    var q = Input.drainMenu(), i;
+    for (i = 0; i < q.length; i++) {
+      if (q[i] === 'back') { Audio2.sfx.back(); go(menuScreen); return; }
+      var pick = this.list.onMenu(q[i]);
+      if (pick) return this.act(pick);
+    }
+    var taps = Input.taps;
+    for (i = 0; i < taps.length; i++) { var p = this.list.tap(taps[i]); if (p) return this.act(p); }
+  },
+  act: function (pick) {
+    if (pick === 'SET NAME')
+      openEditor('YOUR NAME', currentTag(), 4,
+        function (s) { Save.set('pilotTag', s.replace(/ /g, 'A')); go(onlineScreen); },
+        function () { go(onlineScreen); });
+    else if (pick === 'LEADERBOARDS') go(leaderboardScreen);
+    else if (pick === 'VS ONLINE') {
+      if (!Net.isEnabled()) showToast('ONLINE NOT AVAILABLE');
+      else go(vsOnlineScreen);
+    }
+  },
+  draw: function () {
+    drawBgPanels();
+    ctext('ONLINE', W / 2, 30, COL_ACC, 2);
+    this.list.draw();
+    ctext('NAME: ' + currentTag(), W / 2, 150, COL_TEXT);
+    ctext(Net.isEnabled() ? 'CONNECTED' : 'OFFLINE - LOCAL ONLY', W / 2, 168,
+      Net.isEnabled() ? COL_OK : COL_DIM);
+    ctext('ESC BACK', W / 2, H - 12, COL_DIM);
+    drawVolumeBar();
+  }
+};
+
+var leaderboardScreen = {
+  mode: 'endless', scores: null, loading: false,
+  enter: function () { this.mode = 'endless'; this.load(); },
+  load: function () {
+    var self = this; this.scores = null; this.loading = true;
+    Net.fetchTop(this.mode, 10, function (list) { self.scores = list; self.loading = false; });
+  },
+  toggle: function () { this.mode = this.mode === 'endless' ? 'score' : 'endless'; Audio2.sfx.move(); this.load(); },
+  update: function () {
+    var q = Input.drainMenu();
+    for (var i = 0; i < q.length; i++) {
+      var e = q[i];
+      if (e === 'back' || e === 'ok') { Audio2.sfx.back(); go(onlineScreen); return; }
+      if (e === 'left' || e === 'right' || e === 'up' || e === 'down') this.toggle();
+    }
+    if (Input.taps.length) this.toggle();
+  },
+  draw: function () {
+    drawBgPanels();
+    ctext('LEADERBOARD', W / 2, 20, COL_ACC, 2);
+    ctext('< ' + (this.mode === 'endless' ? 'ENDLESS' : 'SCORE ATTACK') + ' >', W / 2, 42, COL_TEXT);
+    var y = 62;
+    if (this.loading) ctext('LOADING...', W / 2, 110, COL_DIM);
+    else if (this.scores === null) {
+      ctext('OFFLINE', W / 2, 96, COL_BAD);
+      var best = this.mode === 'endless' ? Save.get('hiEndless') : Save.get('hiScore');
+      ctext('YOUR BEST  ' + pad(best, 7), W / 2, 116, COL_TEXT);
+    } else if (this.scores.length === 0) {
+      ctext('NO SCORES YET', W / 2, 104, COL_DIM);
+      ctext('BE THE FIRST!', W / 2, 118, COL_ACC);
+    } else {
+      for (var i = 0; i < this.scores.length; i++) {
+        var s = this.scores[i], c = i < 3 ? COL_ACC : COL_TEXT;
+        var nm = String(s.name || '???').slice(0, 4); // untrusted remote value
+        var sc = Math.max(0, Math.min(9999999, s.score | 0));
+        text((i + 1) + '.', W / 2 - 84, y + i * 13, COL_DIM);
+        text(nm, W / 2 - 62, y + i * 13, c);
+        text(pad(sc, 7), W / 2 + 14, y + i * 13, c);
+      }
+    }
+    ctext('LEFT/RIGHT SWITCH   ESC BACK', W / 2, H - 12, COL_DIM);
+  }
+};
+
+// ---- VS ONLINE (room codes + lockstep) --------------------------------------
+
+var lobby = null; // { role, status, code, match, cancelled, started }
+
+var vsOnlineScreen = {
+  list: null,
+  enter: function () { this.list = new MenuList(['HOST GAME', 'JOIN GAME'], W / 2 - 40, 100, 16); },
+  update: function () {
+    var q = Input.drainMenu(), i;
+    for (i = 0; i < q.length; i++) {
+      if (q[i] === 'back') { Audio2.sfx.back(); go(onlineScreen); return; }
+      var pick = this.list.onMenu(q[i]); if (pick) return this.act(pick);
+    }
+    var taps = Input.taps;
+    for (i = 0; i < taps.length; i++) { var p = this.list.tap(taps[i]); if (p) return this.act(p); }
+  },
+  act: function (pick) {
+    if (pick === 'HOST GAME') startHost();
+    else if (pick === 'JOIN GAME')
+      openEditor('ENTER CODE', '', 4,
+        function (code) { startJoin(code); },
+        function () { go(vsOnlineScreen); });
+  },
+  draw: function () {
+    drawBgPanels();
+    ctext('VS ONLINE', W / 2, 30, COL_ACC, 2);
+    this.list.draw();
+    ctext('PLAYING AS ' + currentTag(), W / 2, 150, COL_DIM);
+    ctext('ESC BACK', W / 2, H - 12, COL_DIM);
+  }
+};
+
+function startHost() {
+  lobby = { role: 'host', status: 'CREATING ROOM...', code: '', match: null, cancelled: false, started: false };
+  go(lobbyScreen);
+  Net.createRoom(currentTag(), function (match, code) {
+    if (!match || lobby.cancelled) { if (match) match.leave(); if (lobby) lobby.status = 'FAILED'; return; }
+    lobby.match = match; lobby.code = code; lobby.status = 'WAITING FOR PLAYER';
+    setupMatch(match, 'h');
+    match.ref.child('g/joined').on('value', function (snap) {
+      if (snap.val() && !lobby.started) {
+        lobby.started = true;
+        match.ref.child('g/joined').off();
+        // sets seed + round=1 -> the round listener drives beginNetMatch on
+        // BOTH peers (single start path)
+        match.startMatch(baseSeed());
+      }
+    });
+  });
+}
+function startJoin(code) {
+  lobby = { role: 'guest', status: 'JOINING...', code: code, match: null, cancelled: false, started: false };
+  go(lobbyScreen);
+  Net.joinRoom(code, currentTag(), function (match, err) {
+    if (!match) { lobby.status = err === 'full' ? 'ROOM FULL' : 'NO SUCH ROOM'; return; }
+    if (lobby.cancelled) { match.leave(); return; }
+    lobby.match = match; lobby.status = 'CONNECTING...';
+    setupMatch(match, 'g');
+    // the host sets round=1 once it sees us join -> our round listener fires
+    // -> beginNetMatch. No separate seed listener needed.
+  });
+}
+var lobbyScreen = {
+  update: function () {
+    var q = Input.drainMenu();
+    for (var i = 0; i < q.length; i++) {
+      if (q[i] === 'back') {
+        if (lobby && lobby.match) lobby.match.leave();
+        if (lobby) lobby.cancelled = true;
+        Audio2.sfx.back(); go(vsOnlineScreen); return;
+      }
+    }
+  },
+  draw: function () {
+    drawBgPanels();
+    ctext('VS ONLINE', W / 2, 30, COL_ACC, 2);
+    if (lobby && lobby.role === 'host' && lobby.code) {
+      ctext('YOUR CODE', W / 2, 84, COL_DIM);
+      ctext(lobby.code, W / 2, 104, COL_ACC, 3);
+      ctext('SHARE IT WITH A FRIEND', W / 2, 140, COL_TEXT);
+    }
+    ctext(lobby ? lobby.status : '', W / 2, 172, COL_TEXT);
+    ctext('ESC CANCEL', W / 2, H - 12, COL_DIM);
+  }
+};
+
+var NET_DELAY = 18; // input-delay frames (buffers Firebase relay latency)
+
+function beginNetMatch(match, side, seed) {
+  var lv = 3;
+  var boardH = new Engine.Board({ seed: seed, mode: 'vs', level: lv });
+  var boardG = new Engine.Board({ seed: seed + 1, mode: 'vs', level: lv });
+  var localB = side === 'h' ? boardH : boardG;
+  var remoteB = side === 'h' ? boardG : boardH;
+  game = {
+    kind: 'net', side: side, match: match,
+    boardH: boardH, boardG: boardG, b1: localB, b2: remoteB,
+    bo1: { x: 48, y: 40 }, bo2: { x: 336, y: 40 },
+    genFrame: 0, simFrame: 0, DELAY: NET_DELAY,
+    localInputs: [], localHashes: {}, waiting: false, desync: false, oppLeft: false,
+    over: false, overT: 0, winner: 0,
+    countdown: COUNTDOWN_F, hitstop: 0, dispScore: 0,
+    theme: themeFor(seed), paused: false, pauseList: null,
+    touch: { dragId: null, dragCx: 0, dragCy: 0 }
+  };
+  match.onOpponentLeave = function () {
+    if (!game || game.kind !== 'net') return;
+    game.oppLeft = true;
+    if (!game.over) { game.over = true; game.overT = 0; game.winner = 1; Audio2.sfx.win(); }
+  };
+  match.onRematch = function () {
+    // both sides asked for a rematch — host drives the next round
+    if (game && game.kind === 'net' && game.side === 'h') match.nextRound(baseSeed());
+  };
+  match.onRoundStart = function () {
+    match.readSeed(function (s) { if (s != null) beginNetMatch(match, side, s); });
+  };
+  game.oppTag = '???';
+  match.ref.child(side === 'h' ? 'g/joined' : 'meta/host').once('value', function (s) {
+    if (game && game.kind === 'net') game.oppTag = (s.val() || '???');
+  });
+  Fx.clear();
+  Audio2.playSong('play');
+  go(gameScreen);
+}
+
+// Match-level callbacks are set ONCE (not per round). Every match start —
+// round 1 and every rematch — is driven by the single `round` listener, so
+// beginNetMatch runs exactly once per round on each peer.
+function setupMatch(match, side) {
+  match.onOpponentLeave = function () {
+    if (!game || game.kind !== 'net') return;
+    game.oppLeft = true;
+    if (!game.over) { game.over = true; game.overT = 0; game.winner = 1; Audio2.sfx.win(); }
+  };
+  match.onRematch = function () {
+    if (game && game.kind === 'net' && side === 'h') match.nextRound(baseSeed());
+  };
+  match.onRoundStart = function () {
+    // clear the relay buffers so a rematch doesn't compare against round-1's
+    // stale remote hashes/inputs (harmless no-op on round 1)
+    match.resetStreams();
+    match.readSeed(function (s) { if (s != null) beginNetMatch(match, side, s); });
+  };
+}
+
+function endNetMatch(g) {
+  g.over = true; g.overT = 0; g.dispScore = g.b1.score;
+  // you win if the opponent (remote board) topped out first
+  g.winner = g.b2.gameOver ? (g.b1.gameOver ? 0 : 1) : 2;
+  if (g.winner === 1) Audio2.sfx.win();
+  else if (g.winner === 2) Audio2.sfx.lose();
+}
+
+// loopback "match" for offline smoke-testing the net path (remote == local,
+// so the lockstep always has the peer's input). Never reachable via the UI.
+function mockMatch() {
+  var m = {
+    _in: {}, onOpponentLeave: null, onRematch: null, onRoundStart: null,
+    ref: { child: function () {
+      return {
+        on: function () {}, off: function () {}, remove: function () {},
+        set: function () {}, transaction: function () {},
+        once: function (ev, cb) { cb && cb({ val: function () { return null; }, exists: function () { return false; } }); }
+      };
+    } },
+    sendInput: function (f, i) { m._in[f] = i; },
+    getRemoteInput: function (f) { return m._in[f] !== undefined ? m._in[f] : null; },
+    getRemoteHash: function () { return undefined; },
+    sendHash: function () {}, flush: function () {}, leave: function () {},
+    requestRematch: function () {}, startMatch: function () {},
+    readSeed: function (cb) { cb(4242); }, nextRound: function () {}
+  };
+  return m;
+}
+window.__pp.startNetMock = function () { beginNetMatch(mockMatch(), 'h', 4242); };
+
+// Esc / pause during an online match = forfeit (pausing would just stall the
+// opponent, so there's no real pause online).
+function forfeitNet() {
+  var g = game;
+  if (!g || g.kind !== 'net' || g.over) return;
+  if (g.match) g.match.leave();
+  g.over = true; g.overT = 0; g.winner = 2; g.oppLeft = false;
+  Audio2.sfx.lose();
+}
+
+function screenBoOf(g, board) {
+  // which screen slot a canonical board is drawn in, given our side
+  if (g.side === 'h') return board === g.boardH ? g.bo1 : g.bo2;
+  return board === g.boardG ? g.bo1 : g.bo2;
+}
+function routeNetAttacks(g) {
+  var i, at;
+  for (i = 0; i < g.boardH.attacks.length; i++) {
+    at = g.boardH.attacks[i]; g.boardG.queueGarbage(at.w, at.h);
+    Backgrounds.pulse(screenBoOf(g, g.boardG).x + Render.BOARD_W / 2, at.w * at.h);
+  }
+  for (i = 0; i < g.boardG.attacks.length; i++) {
+    at = g.boardG.attacks[i]; g.boardH.queueGarbage(at.w, at.h);
+    Backgrounds.pulse(screenBoOf(g, g.boardH).x + Render.BOARD_W / 2, at.w * at.h);
+  }
+  g.boardH.attacks.length = 0; g.boardG.attacks.length = 0;
+}
 
 // ---- VS DIFFICULTY SELECT ----------------------------------------------------
 
@@ -690,7 +1059,7 @@ var gameScreen = {
     // cursor glide + ambient background advance at sim rate on every path
     // (incl. pause/countdown/hitstop) so they never stall or vary by refresh
     Backgrounds.tick(g.theme);
-    if (g.kind === 'vs') { Render.tickCursorLerp(g.b1); Render.tickCursorLerp(g.b2); }
+    if (g.kind === 'vs' || g.kind === 'net') { Render.tickCursorLerp(g.b1); Render.tickCursorLerp(g.b2); }
     else Render.tickCursorLerp(g.board);
 
     if (g.paused) { this.updatePause(); return; }
@@ -714,9 +1083,72 @@ var gameScreen = {
 
     if (g.kind === 'solo') this.updateSolo();
     else if (g.kind === 'vs') this.updateVs();
+    else if (g.kind === 'net') this.updateNet();
     else if (g.kind === 'puzzle') this.updatePuzzle();
 
     Fx.update();
+  },
+
+  updateNet: function () {
+    var g = game, m = g.match;
+    if (g.over) {
+      g.boardH.step(null); g.boardG.step(null);
+      g.overT++;
+      if (g.overT > 90) go(resultsScreen);
+      return;
+    }
+    // local input is the DETERMINISTIC packet only (keyboard + on-screen pad);
+    // touch cell-tap/drag is intentionally NOT used online — it writes the
+    // cursor directly and would desync the lockstep.
+    var li = Input.boardInput(0, true);
+    g.localInputs[g.genFrame] = li;
+    m.sendInput(g.genFrame, li);
+    g.genFrame++;
+
+    g.waiting = false;
+    var steps = 0;
+    while (g.simFrame < g.genFrame - g.DELAY && steps < 8) {
+      var ri = m.getRemoteInput(g.simFrame);
+      if (ri === null) { g.waiting = true; break; } // stall until the peer's input arrives
+      g.waitTicks = 0;
+      var lin = g.localInputs[g.simFrame] || { left: false, right: false, up: false, down: false, swap: false, raise: false };
+      var hIn = g.side === 'h' ? lin : ri;
+      var gIn = g.side === 'h' ? ri : lin;
+      g.boardH.step(hIn); g.boardG.step(gIn);
+      routeNetAttacks(g);
+      processEvents(g.boardH, screenBoOf(g, g.boardH), null);
+      processEvents(g.boardG, screenBoOf(g, g.boardG), null);
+      g.dispScore += Math.ceil((g.b1.score - g.dispScore) * 0.2);
+
+      // desync guard: exchange a combined hash every 30 frames, compare when
+      // the peer's hash for a past frame is in
+      if (g.simFrame % 30 === 0) {
+        var h = (g.boardH.hash() ^ Math.imul(g.boardG.hash(), 31)) >>> 0;
+        g.localHashes[g.simFrame] = h;
+        m.sendHash(g.simFrame, h);
+      }
+      g.simFrame++; steps++;
+
+      if (g.boardH.gameOver || g.boardG.gameOver) { endNetMatch(g); break; }
+    }
+    // compare any peer hashes we can
+    for (var f in g.localHashes) {
+      var rh = m.getRemoteHash(f | 0);
+      if (rh !== undefined) {
+        if (rh !== g.localHashes[f]) { g.desync = true; if (!g.over) { g.over = true; g.overT = 0; g.winner = 0; } }
+        delete g.localHashes[f];
+      }
+    }
+    // liveness: if the peer's inputs stop arriving for too long (a frozen /
+    // silently-dropped client whose onDisconnect never fired), end the match
+    // rather than hang forever.
+    if (g.waiting) {
+      g.waitTicks = (g.waitTicks || 0) + 1;
+      if (g.waitTicks > 8 * 60 && !g.over) { // ~8s of no peer input
+        g.oppLeft = true; g.over = true; g.overT = 0; g.winner = 1; Audio2.sfx.win();
+        if (m.leave) m.leave();
+      }
+    }
   },
 
   updateSolo: function () {
@@ -750,6 +1182,9 @@ var gameScreen = {
         } else {
           if (b.score > Save.get('hiScore')) { Save.set('hiScore', b.score); g.newRecord = true; }
         }
+        // online leaderboard (fail-silent)
+        if (Net.isEnabled() && b.score > 0)
+          Net.submitScore(g.mode === 'score' ? 'score' : 'endless', currentTag(), b.score);
       }
       if (g.overT > 60) go(resultsScreen);
     }
@@ -904,12 +1339,19 @@ var gameScreen = {
       Render.drawBoard(ctx, g.b2, g.bo2.x, g.bo2.y, { showCursor: true });
       // center HUD
       var cxm = W / 2;
-      ctext(g.cpu ? 'YOU' : 'P1', g.bo1.x + 48, g.bo1.y - 14, COL_BLUE);
-      var rightName = g.cpu ? (g.storyStage !== null ? Story.STAGES[g.storyStage].name : 'CPU LV' + g.tier) : 'P2';
+      var leftName = g.kind === 'net' ? currentTag() : (g.cpu ? 'YOU' : 'P1');
+      var rightName = g.kind === 'net' ? (g.oppTag || '???')
+        : (g.cpu ? (g.storyStage !== null ? Story.STAGES[g.storyStage].name : 'CPU LV' + g.tier) : 'P2');
+      ctext(leftName, g.bo1.x + 48, g.bo1.y - 14, COL_BLUE);
       ctext(rightName, g.bo2.x + 48, g.bo2.y - 14, COL_BAD);
       ctext('SCORE', cxm, 60, COL_DIM);
       ctext(pad(g.dispScore, 7), cxm, 70);
       ctext('CHAIN x' + g.b1.maxChain, cxm, 86, g.b1.maxChain >= 3 ? COL_ACC : COL_DIM);
+      // online status: waiting for the peer's inputs, or a desync
+      if (g.kind === 'net' && !g.over) {
+        if (g.desync) ctext('DESYNC', cxm, 108, COL_BAD);
+        else if (g.waiting && (frame >> 3) % 2) ctext('WAITING...', cxm, 108, COL_DIM);
+      }
       // pending garbage warning
       var q1 = 0, q2 = 0, i;
       for (i = 0; i < g.b1.garbageQueue.length; i++) q1 += g.b1.garbageQueue[i].w * g.b1.garbageQueue[i].h;
@@ -918,10 +1360,15 @@ var gameScreen = {
       if (q2) ctext('! ' + q2, g.bo2.x + 48, g.bo2.y - 26, COL_BAD);
 
       if (g.over) {
-        var wbo = g.winner === 1 ? g.bo1 : g.bo2;
-        var lbo = g.winner === 1 ? g.bo2 : g.bo1;
-        ctext('WIN!', wbo.x + 48, wbo.y + 80, COL_ACC, stampScale(g.overT));
-        ctext('LOSE', lbo.x + 48, lbo.y + 80, COL_BAD, stampScale(g.overT));
+        if (g.kind === 'net' && g.winner === 0) {
+          ctext(g.desync ? 'DESYNC' : 'DRAW', cxm, 130, COL_BAD, 2);
+        } else {
+          var wbo = g.winner === 1 ? g.bo1 : g.bo2;
+          var lbo = g.winner === 1 ? g.bo2 : g.bo1;
+          ctext('WIN!', wbo.x + 48, wbo.y + 80, COL_ACC, stampScale(g.overT));
+          ctext('LOSE', lbo.x + 48, lbo.y + 80, COL_BAD, stampScale(g.overT));
+        }
+        if (g.kind === 'net' && g.oppLeft) ctext('OPPONENT LEFT', cxm, 150, COL_DIM);
       }
     }
 
@@ -937,7 +1384,7 @@ var gameScreen = {
                    : g.countdown > COUNTDOWN_F - 80 ? COUNTDOWN_F - 41
                    : g.countdown > 30 ? COUNTDOWN_F - 81 : 30;
       var cs = (winStart - g.countdown) < 5 ? 5 : 4;
-      var boards = g.kind === 'vs' ? [g.bo1, g.bo2] : [g.bo];
+      var boards = (g.kind === 'vs' || g.kind === 'net') ? [g.bo1, g.bo2] : [g.bo];
       for (var bi = 0; bi < boards.length; bi++) {
         var bb = boards[bi];
         ctext(n, bb.x + 48 + 1, bb.y + 78 + 1, '#101020', cs);
@@ -997,22 +1444,24 @@ var resultsScreen = {
     this.t = 0;
     this.disp = 0;
     var g = game;
+    this.rematchWaiting = false;
     var items = ['RETRY', 'MENU'];
     if (g.kind === 'puzzle' && g.won && g.idx < 29) items.unshift('NEXT PUZZLE');
     if (g.kind === 'vs' && g.storyStage !== null && g.winner === 1) {
       items = g.storyStage >= 7 ? ['THE END...', 'MENU'] : ['NEXT STAGE', 'MENU'];
     }
-    this.list = new MenuList(items, W / 2 - 40, 170);
+    if (g.kind === 'net') items = (g.oppLeft || g.desync) ? ['MENU'] : ['REMATCH', 'MENU'];
+    this.list = new MenuList(items, W / 2 - 40, 176);
   },
   update: function () {
     this.t++;
     var g = game;
-    var finalScore = g.kind === 'vs' ? g.b1.score : (g.board ? g.board.score : 0);
+    var finalScore = (g.kind === 'vs' || g.kind === 'net') ? g.b1.score : (g.board ? g.board.score : 0);
     this.disp += Math.ceil((finalScore - this.disp) * 0.12);
     if (this.disp > finalScore) this.disp = finalScore;
     var q = Input.drainMenu();
     for (var i = 0; i < q.length; i++) {
-      if (q[i] === 'back') { go(menuScreen); return; }
+      if (q[i] === 'back') { if (g.kind === 'net' && g.match) g.match.leave(); go(menuScreen); return; }
       var pick = this.list.onMenu(q[i]);
       if (pick) return this.act(pick);
     }
@@ -1025,10 +1474,11 @@ var resultsScreen = {
   act: function (pick) {
     var g = game;
     if (pick === 'RETRY') restartGame();
-    else if (pick === 'MENU') go(menuScreen);
+    else if (pick === 'MENU') { if (g.kind === 'net' && g.match) g.match.leave(); go(menuScreen); }
     else if (pick === 'NEXT PUZZLE') startPuzzle(g.idx + 1);
     else if (pick === 'NEXT STAGE') go(storyIntroScreen);
     else if (pick === 'THE END...') go(storyEndScreen);
+    else if (pick === 'REMATCH') { if (g.match) { this.rematchWaiting = true; g.match.requestRematch(); } }
   },
   draw: function () {
     drawBgPanels();
@@ -1045,6 +1495,14 @@ var resultsScreen = {
       ctext('PUZZLE ' + (g.idx + 1) + ' - ' + Puzzle.LEVELS[g.idx].name, W / 2, 30, COL_DIM);
       ctext(g.won ? 'CLEAR!' : 'OUT OF MOVES', W / 2, 48, g.won ? COL_OK : COL_BAD, stampScale(this.t));
       if (g.won && g.board.maxChain >= 2) ctext('CHAIN x' + g.board.maxChain + '!', W / 2, 84, COL_ACC);
+    } else if (g.kind === 'net') {
+      ctext('ONLINE MATCH', W / 2, 30, COL_DIM);
+      var nmsg = g.winner === 1 ? 'YOU WIN!' : (g.winner === 2 ? 'YOU LOSE' : (g.desync ? 'DESYNC' : 'DRAW'));
+      ctext(nmsg, W / 2, 50, g.winner === 1 ? COL_ACC : COL_BAD, stampScale(this.t));
+      ctext('VS ' + (g.oppTag || '???'), W / 2, 86, COL_TEXT);
+      ctext('SCORE ' + g.b1.score + '   CHAIN x' + g.b1.maxChain, W / 2, 104, COL_DIM);
+      if (g.oppLeft) ctext('OPPONENT LEFT', W / 2, 122, COL_DIM);
+      if (this.rematchWaiting) ctext('WAITING FOR OPPONENT...', W / 2, 150, COL_ACC);
     } else {
       var st = g.storyStage !== null ? Story.STAGES[g.storyStage] : null;
       ctext(g.winner === 1 ? 'YOU WIN!' : (g.cpu ? 'YOU LOSE' : 'PLAYER ' + g.winner + ' WINS!'),
@@ -1068,7 +1526,9 @@ function handleGlobalKeys() {
   for (var i = 0; i < gq.length; i++) {
     var ev = gq[i];
     if (ev === 'pause') {
-      if (screen === gameScreen && game && !game.over) togglePause();
+      if (screen === gameScreen && game && !game.over) {
+        if (game.kind === 'net') forfeitNet(); else togglePause();
+      }
     } else if (ev === 'volup') {
       Audio2.volUp(); showToast('VOL ' + Math.round(Audio2.getVolume() * 100) + '%');
     } else if (ev === 'voldown') {
@@ -1087,9 +1547,12 @@ function handleGlobalKeys() {
 function boot() {
   Save.load();
   Audio2.init();
+  Net.init();
   SpritesBuild();
   Backgrounds.build();
   setupCanvas();
+  Touchpad.setActive(); // build the deck + apply gb layout before first sizing
+  resize();
   go(titleScreen);
 
   var last = performance.now();
@@ -1101,6 +1564,7 @@ function boot() {
     var steps = 0;
     while (acc >= 1000 / 60 && steps < 3) {
       handleGlobalKeys();
+      Input.pumpPadMenu(); // D-pad -> menu nav on every screen
       screen.update();
       if (fadeT > 0) fadeT--; // sim-rate so the fade lasts the same everywhere
       Input.endFrame();
@@ -1116,9 +1580,8 @@ function boot() {
       ctx.fillStyle = 'rgba(8,8,20,' + (fadeT / 8 * 0.8).toFixed(3) + ')';
       ctx.fillRect(0, 0, W, H);
     }
-    // virtual pad (phones): visible only during active play
-    Touchpad.setActive(screen === gameScreen && !!game && !game.paused &&
-      !game.over && (game.countdown | 0) <= 0);
+    // Game-Boy control deck: permanent on touch devices (all screens)
+    Touchpad.setActive();
   }
   requestAnimationFrame(loop);
 }
