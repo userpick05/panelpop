@@ -68,9 +68,12 @@ function build() { /* no-op */ }
 function setSize(w, h) {
   if (w === W && h === H) return;
   W = w; H = h;
+  // only relocate orbs that now fall outside the bounds — so a small WebView
+  // viewport wobble (system/URL bar animating) doesn't make the whole bokeh
+  // field visibly jump; the rest drift into the new area via tick() wrapping
   for (var i = 0; i < orbs.length; i++) {
-    orbs[i].x = Math.random() * W;
-    orbs[i].y = Math.random() * H;
+    if (orbs[i].x > W) orbs[i].x = Math.random() * W;
+    if (orbs[i].y > H + orbs[i].r) orbs[i].y = Math.random() * H;
   }
 }
 

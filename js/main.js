@@ -38,7 +38,10 @@ function resize() {
     // an unusually tall/short viewport still lays out sanely
     W = PORT_W;
     H = Math.round(PORT_W * vh / vw);
-    if (H < 440) H = 440; else if (H > 640) H = 640;
+    // floor at 480 so squat/tablet portrait (aspect < ~1.78) letterboxes the
+    // sides rather than letting the board's bottom rows slip under the floating
+    // deck; ceil at 640 so ultra-tall viewports stay sane
+    if (H < 480) H = 480; else if (H > 640) H = 640;
   } else {
     W = LAND_W; H = LAND_H;
   }
@@ -161,7 +164,8 @@ MenuList.prototype.draw = function (labels) {
     var sel = i === this.idx;
     if (sel) {
       ctx.fillStyle = 'rgba(242,202,78,0.12)';
-      ctx.fillRect(this.x - 14, y - 3, 200, 12);
+      var hw = Math.min(200, W - (this.x - 14) - 4); // don't overflow narrow (portrait) canvas
+      ctx.fillRect(this.x - 14, y - 3, hw, 12);
       text('>', this.x - 10, y, COL_ACC);
     }
     text(labels ? labels[i] : this.items[i], this.x, y, sel ? COL_ACC : COL_TEXT);
@@ -1692,7 +1696,7 @@ function boot() {
   SpritesBuild();
   Backgrounds.build();
   setupCanvas();
-  Touchpad.setActive(); // build the deck + apply gb layout before first sizing
+  Touchpad.setActive(); // build the floating deck before first sizing
   resize();
   go(titleScreen);
 

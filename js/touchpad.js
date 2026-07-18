@@ -44,8 +44,8 @@ var CSS =
 'display:none;pointer-events:none;touch-action:none;' +
 '-webkit-user-select:none;user-select:none;}' +
 // D-pad — a rounded cross; the whole square is the thumb zone (dominant axis)
-'.tp-dpad{position:absolute;left:6vw;bottom:7vh;width:38vw;height:38vw;' +
-'max-width:210px;max-height:210px;pointer-events:auto;touch-action:none;' +
+'.tp-dpad{position:absolute;left:6vw;bottom:6vh;width:34vw;height:34vw;' +
+'max-width:190px;max-height:190px;pointer-events:auto;touch-action:none;' +
 'border-radius:24%;background:rgba(38,38,74,0.5);' +
 'border:2px solid rgba(255,255,255,0.12);' +
 'box-shadow:inset 0 2px 0 rgba(255,255,255,0.05);}' +
@@ -58,7 +58,7 @@ var CSS =
 '.tp-ar.l{left:14%;top:50%;}.tp-ar.r{left:86%;top:50%;}' +
 '.tp-ar.on{color:#f2ca4e;}' +
 // right cluster: a bottom-right column — top row (START/RAISE) over bottom row (B/A)
-'.tp-right{position:absolute;right:5vw;bottom:7vh;display:flex;flex-direction:column;' +
+'.tp-right{position:absolute;right:5vw;bottom:6vh;display:flex;flex-direction:column;' +
 'align-items:flex-end;gap:2.2vh;pointer-events:none;}' +
 '.tp-row{display:flex;align-items:flex-end;gap:3.5vw;pointer-events:none;}' +
 '.tp-btn{pointer-events:auto;touch-action:none;border-radius:50%;' +
