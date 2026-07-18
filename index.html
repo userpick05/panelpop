@@ -12,12 +12,12 @@
     overflow: hidden;
     touch-action: none;
   }
-  /* default (desktop / no pad): center the canvas */
+  /* The canvas is aspect-fit and centered in the full viewport (JS sizes it).
+     In portrait it very nearly fills the screen; the on-screen control deck
+     (js/touchpad.js) floats over its lower region as a transparent overlay,
+     so the game reclaims the whole display instead of a tall button slab. */
   body { display: flex; align-items: center; justify-content: center; }
-  #screen { display: flex; align-items: center; justify-content: center; }
-  /* Game-Boy portrait: screen on top, control deck below */
-  body.gb { flex-direction: column; align-items: stretch; justify-content: flex-start; }
-  body.gb #screen { flex: 1 1 auto; width: 100%; min-height: 0; }
+  #screen { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
   canvas {
     image-rendering: pixelated;
     image-rendering: crisp-edges;
@@ -28,26 +28,26 @@
 </head>
 <body>
 <div id="screen"><canvas id="game"></canvas></div>
-<script src="js/rng.js?v=0.8.0"></script>
-<script src="js/engine.js?v=0.8.0"></script>
-<script src="js/save.js?v=0.8.0"></script>
-<script src="js/font.js?v=0.8.0"></script>
-<script src="js/sprites.js?v=0.8.0"></script>
-<script src="js/audio.js?v=0.8.0"></script>
-<script src="js/input.js?v=0.8.0"></script>
-<script src="js/touchpad.js?v=0.8.0"></script>
-<script src="js/fx.js?v=0.8.0"></script>
-<script src="js/backgrounds.js?v=0.8.0"></script>
-<script src="js/render.js?v=0.8.0"></script>
-<script src="js/ai.js?v=0.8.0"></script>
-<script src="js/puzzle.js?v=0.8.0"></script>
-<script src="js/story.js?v=0.8.0"></script>
+<script src="js/rng.js?v=0.9.0"></script>
+<script src="js/engine.js?v=0.9.0"></script>
+<script src="js/save.js?v=0.9.0"></script>
+<script src="js/font.js?v=0.9.0"></script>
+<script src="js/sprites.js?v=0.9.0"></script>
+<script src="js/audio.js?v=0.9.0"></script>
+<script src="js/input.js?v=0.9.0"></script>
+<script src="js/touchpad.js?v=0.9.0"></script>
+<script src="js/fx.js?v=0.9.0"></script>
+<script src="js/backgrounds.js?v=0.9.0"></script>
+<script src="js/render.js?v=0.9.0"></script>
+<script src="js/ai.js?v=0.9.0"></script>
+<script src="js/puzzle.js?v=0.9.0"></script>
+<script src="js/story.js?v=0.9.0"></script>
 <!-- online (leaderboards + versus). Firebase loads from CDN; if it fails
      (offline) the game just runs local — net.js guards everything. -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-<script src="js/firebase-config.js?v=0.8.0"></script>
-<script src="js/net.js?v=0.8.0"></script>
-<script src="js/main.js?v=0.8.0"></script>
+<script src="js/firebase-config.js?v=0.9.0"></script>
+<script src="js/net.js?v=0.9.0"></script>
+<script src="js/main.js?v=0.9.0"></script>
 </body>
 </html>

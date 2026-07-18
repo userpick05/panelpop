@@ -1,16 +1,24 @@
-// PANEL POP — on-screen Game-Boy-style control deck for phones.
+// PANEL POP — floating on-screen control deck for phones (portrait).
 //
-// A permanent bottom panel (shown on ALL screens on touch devices, hidden on
-// desktop): a thumb D-pad on the left, A / B buttons on the right, and a RAISE
-// button in the middle. It feeds the same Input pad state the keyboard uses, so
-// it drives BOTH menu navigation (D-pad + A=OK + B=back) and gameplay (cursor +
-// SWAP + RAISE + pause). Adding `body.gb` switches the page to the portrait
-// "screen on top, controls below" layout.
+// A TRANSPARENT overlay that floats over the lower part of the game rather than
+// a solid slab, so the game keeps the whole screen. Layout:
+//
+//     [ D-PAD ]                         [ START ] [ RAISE ]
+//                                          [ B ]    [ A ]
+//
+// The D-pad sits bottom-left; on the right, A / B on the bottom row with
+// START (pause) and RAISE on the row directly above (RAISE over A). It feeds
+// the same Input pad state the keyboard uses, so it drives BOTH menu navigation
+// (D-pad + A=OK + B=back) and gameplay (cursor + SWAP + RAISE + START=pause).
+//
+// The container is pointer-events:none and only the buttons are interactive, so
+// taps anywhere else still reach the game canvas (tap/drag-to-swap keeps working).
 'use strict';
 
 (function () {
 
-var root = null, dpadEl = null, arrows = {}, aEl = null, bEl = null, raiseEl = null;
+var root = null, dpadEl = null, arrows = {}, aEl = null, bEl = null,
+    startEl = null, raiseEl = null;
 var mode = 'auto';          // 'auto' | 'on' | 'off'
 var built = false, shown = false;
 var dpadPointer = null, dpadRect = null, curDir = null;
@@ -31,41 +39,42 @@ function enabled() {
 }
 
 var CSS =
-// deck: a flex child at the bottom of the column layout (see index.html .gb)
-'#tp-deck{display:none;flex:0 0 auto;height:clamp(240px,46vh,440px);width:100%;' +
-'box-sizing:border-box;align-items:center;justify-content:space-between;' +
-'padding:0 5vw;background:linear-gradient(#18182e,#101019);' +
-'border-top:2px solid rgba(255,255,255,0.06);touch-action:none;' +
-'-webkit-user-select:none;user-select:none;z-index:20;}' +
-'body.gb #tp-deck{display:flex;}' +
+// deck: a transparent full-width band floating over the game's lower region
+'#tp-deck{position:fixed;left:0;right:0;bottom:0;height:44vh;z-index:30;' +
+'display:none;pointer-events:none;touch-action:none;' +
+'-webkit-user-select:none;user-select:none;}' +
 // D-pad — a rounded cross; the whole square is the thumb zone (dominant axis)
-'.tp-dpad{position:relative;width:38vmin;height:38vmin;max-width:210px;max-height:210px;' +
-'border-radius:24%;background:#26264a;border:2px solid rgba(255,255,255,0.10);' +
-'box-shadow:inset 0 2px 0 rgba(255,255,255,0.06);touch-action:none;}' +
-'.tp-cross{position:absolute;background:#33335c;border-radius:6px;}' +
+'.tp-dpad{position:absolute;left:6vw;bottom:6vh;width:34vw;height:34vw;' +
+'max-width:190px;max-height:190px;pointer-events:auto;touch-action:none;' +
+'border-radius:24%;background:rgba(38,38,74,0.5);' +
+'border:2px solid rgba(255,255,255,0.12);' +
+'box-shadow:inset 0 2px 0 rgba(255,255,255,0.05);}' +
+'.tp-cross{position:absolute;background:rgba(70,70,120,0.55);border-radius:6px;}' +
 '.tp-cross.h{left:14%;right:14%;top:34%;bottom:34%;}' +
 '.tp-cross.v{top:14%;bottom:14%;left:34%;right:34%;}' +
-'.tp-ar{position:absolute;color:rgba(255,255,255,0.6);font:700 4.6vmin sans-serif;' +
+'.tp-ar{position:absolute;color:rgba(255,255,255,0.62);font:700 4.6vmin sans-serif;' +
 'transform:translate(-50%,-50%);pointer-events:none;}' +
 '.tp-ar.u{left:50%;top:14%;}.tp-ar.d{left:50%;top:86%;}' +
 '.tp-ar.l{left:14%;top:50%;}.tp-ar.r{left:86%;top:50%;}' +
 '.tp-ar.on{color:#f2ca4e;}' +
-// right button cluster
-'.tp-right{position:relative;width:40vmin;height:38vmin;max-width:220px;max-height:210px;}' +
-'.tp-btn{position:absolute;touch-action:none;border-radius:50%;font:700 4vmin sans-serif;' +
-'display:flex;align-items:center;justify-content:center;color:#101020;' +
-'border:2px solid rgba(0,0,0,0.25);box-shadow:0 2px 0 rgba(0,0,0,0.3);}' +
+// right cluster: a bottom-right column — top row (START/RAISE) over bottom row (B/A)
+'.tp-right{position:absolute;right:5vw;bottom:6vh;display:flex;flex-direction:column;' +
+'align-items:flex-end;gap:2.2vh;pointer-events:none;}' +
+'.tp-row{display:flex;align-items:flex-end;gap:3.5vw;pointer-events:none;}' +
+'.tp-btn{pointer-events:auto;touch-action:none;border-radius:50%;' +
+'font:700 4vmin sans-serif;display:flex;align-items:center;justify-content:center;' +
+'color:#101020;border:2px solid rgba(0,0,0,0.25);box-shadow:0 2px 0 rgba(0,0,0,0.3);}' +
 '.tp-btn.press{transform:translateY(2px);box-shadow:none;filter:brightness(1.2);}' +
-'.tp-a{right:2vmin;bottom:6vmin;width:19vmin;height:19vmin;max-width:104px;max-height:104px;' +
-'background:#f27d9d;}' +
-'.tp-b{right:20vmin;bottom:15vmin;width:16vmin;height:16vmin;max-width:88px;max-height:88px;' +
-'background:#7f8fe8;}' +
-// RAISE in the middle (Start/Select spot)
-'.tp-raise{position:relative;width:20vmin;max-width:120px;height:8vmin;max-height:44px;' +
-'border-radius:22px;background:#2a2a48;border:2px solid rgba(255,255,255,0.12);' +
-'color:#e8e8f4;font:700 3vmin sans-serif;display:flex;align-items:center;' +
-'justify-content:center;touch-action:none;}' +
-'.tp-raise.press{background:rgba(242,202,78,0.5);color:#101020;}';
+'.tp-a{width:20vw;height:20vw;max-width:110px;max-height:110px;background:#f27d9d;}' +
+'.tp-b{width:17vw;height:17vw;max-width:94px;max-height:94px;background:#7f8fe8;}' +
+// START / RAISE pills on the row above
+'.tp-pill{pointer-events:auto;touch-action:none;border-radius:22px;' +
+'display:flex;align-items:center;justify-content:center;font:700 3vmin sans-serif;' +
+'height:8vw;max-height:44px;background:rgba(42,42,72,0.72);color:#e8e8f4;' +
+'border:2px solid rgba(255,255,255,0.14);}' +
+'.tp-pill.press{background:rgba(242,202,78,0.55);color:#101020;}' +
+'.tp-start{width:22vw;max-width:118px;}' +
+'.tp-raise{width:20vw;max-width:108px;}';
 
 function make(cls, html) {
   var d = document.createElement('div');
@@ -94,22 +103,27 @@ function build() {
   dpadEl.appendChild(arrows.up); dpadEl.appendChild(arrows.down);
   dpadEl.appendChild(arrows.left); dpadEl.appendChild(arrows.right);
 
-  raiseEl = make('tp-raise', 'RAISE');
-
+  // right cluster: top row (START | RAISE) above bottom row (B | A)
   var right = make('tp-right');
-  aEl = make('tp-btn tp-a', 'A');
+  var topRow = make('tp-row');
+  startEl = make('tp-pill tp-start', 'START');
+  raiseEl = make('tp-pill tp-raise', 'RAISE');
+  topRow.appendChild(startEl); topRow.appendChild(raiseEl);
+  var btnRow = make('tp-row');
   bEl = make('tp-btn tp-b', 'B');
-  right.appendChild(bEl); right.appendChild(aEl);
+  aEl = make('tp-btn tp-a', 'A');
+  btnRow.appendChild(bEl); btnRow.appendChild(aEl);
+  right.appendChild(topRow); right.appendChild(btnRow);
 
   root.appendChild(dpadEl);
-  root.appendChild(raiseEl);
   root.appendChild(right);
   document.body.appendChild(root);
 
   wireDpad();
-  wireButton(aEl, 'swap', false);   // A = swap in game / OK in menus
-  wireButton(bEl, 'back', false);   // B = back in menus / pause in game
-  wireButton(raiseEl, 'raise', true); // RAISE = hold to raise
+  wireButton(aEl, 'swap', false);      // A = swap in game / OK in menus
+  wireButton(bEl, 'back', false);      // B = back in menus
+  wireButton(startEl, 'start', false); // START = pause (toggles in game)
+  wireButton(raiseEl, 'raise', true);  // RAISE = hold to raise
 
   window.addEventListener('resize', function () { dpadRect = null; });
   document.addEventListener('visibilitychange', function () {
@@ -120,9 +134,9 @@ function build() {
 
 function resetVisuals() {
   setDir(null);
-  if (aEl) aEl.classList.remove('press');
-  if (bEl) bEl.classList.remove('press');
-  if (raiseEl) raiseEl.classList.remove('press');
+  [aEl, bEl, startEl, raiseEl].forEach(function (el) {
+    if (el) el.classList.remove('press');
+  });
 }
 
 function setDir(dir) {
@@ -183,23 +197,28 @@ function wireButton(el, ctrl, held) {
 
 function applyShown(show) {
   shown = show;
-  document.body.classList.toggle('gb', show);
+  if (root) root.style.display = show ? 'block' : 'none';
   if (!show) { Input.padClear(); resetVisuals(); }
 }
 
-// called each frame; the GB deck is permanent on touch devices in PORTRAIT
-// (all screens). In landscape (rotated phone, or a portrait web bundle served
-// into a not-yet-updated landscape shell) it falls back to the centered canvas
-// + tap controls rather than a cramped deck.
+// called each frame; the deck floats on touch devices in PORTRAIT (all screens).
+// In landscape (rotated phone, or a portrait web bundle in an old landscape
+// shell) it falls back to the centered canvas + tap controls.
 function setActive() {
   if (!built) build();
-  var portrait = window.innerHeight >= window.innerWidth;
+  // strict '>' so an exactly-square viewport reads as landscape here too —
+  // matches main.js resize() (vh > vw), so the deck can't show over a
+  // landscape-laid-out canvas at the vw===vh boundary
+  var portrait = window.innerHeight > window.innerWidth;
   var want = enabled() && portrait;
   if (want !== shown) applyShown(want);
 }
 
 function setMode(m) { mode = m; if (built) setActive(); }
 
-window.Touchpad = { setActive: setActive, setMode: setMode, enabled: enabled };
+window.Touchpad = {
+  setActive: setActive, setMode: setMode,
+  enabled: enabled, deckActive: function () { return shown; }
+};
 
 })();

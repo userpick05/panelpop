@@ -101,11 +101,12 @@ var padRaise = false;
 var padSwapEdge = false;
 
 // ctrl: 'left'|'right'|'up'|'down' (held, drives cursor + menu nav) |
-// 'raise' (held) | 'swap' (edge; also = menu OK) | 'back' (edge; menu back +
-// in-game pause)
+// 'raise' (held) | 'swap' (edge; also = menu OK) | 'back' (edge; menu back) |
+// 'start' (edge; in-game pause toggle — the dedicated pause button)
 function padSet(ctrl, pressed) {
   if (ctrl === 'swap') { if (pressed) { padSwapEdge = true; menuQueue.push('ok'); } }
-  else if (ctrl === 'back') { if (pressed) { menuQueue.push('back'); globalQueue.push('pause'); } }
+  else if (ctrl === 'back') { if (pressed) { menuQueue.push('back'); } }
+  else if (ctrl === 'start') { if (pressed) { globalQueue.push('pause'); } }
   else if (ctrl === 'raise') { padRaise = pressed; }
   else if (ctrl in padHeld) {
     padHeld[ctrl] = pressed;

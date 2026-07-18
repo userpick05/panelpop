@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.9.0 — 2026-07-17 (branch feature-v0.9-portrait-ui)
+
+Portrait-native interface — the game is now laid out FOR a tall screen instead
+of a shrunken landscape canvas, so it reclaims the whole display. All shared JS
++ CSS, so it reaches installed phones over the air (no new APK).
+
+- **Portrait-native canvas** — in a portrait viewport the internal canvas is now
+  tall (270 wide, height matched to the device) and fills the screen, so the
+  board draws ~78% bigger than the old letterboxed take. Desktop / landscape is
+  unchanged (480×270). The ambient wash now fills the full screen at any size.
+- **Floating control deck** — the tall button slab is gone. The D-pad and
+  buttons float as a transparent overlay over the game's lower band, and the
+  game never draws under them, so there's far more real estate.
+- **START button** — a dedicated pause button, on the row above A / B (START in
+  the middle, RAISE on the right above A). A = swap / confirm, B = back.
+- **Two players side by side** — Vs. / 2P / Story / online now place both boards
+  next to each other on one screen (portrait and the web/landscape view), with a
+  clear gutter between them instead of the old wide split.
+- **Framed boards** — each board sits in a colored frame (you = green, rival =
+  red, solo = blue) with a dark backing, so it reads as its own space instead of
+  blending into the background.
+- Menus (main / vs-select / puzzle grid / title) re-flow to portrait.
+
 ## v0.8.1 — 2026-07-17 (branch feature-v0.8-portrait)
 
 Fix: the in-app APK update could sit on "Downloading update…" forever with no
